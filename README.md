@@ -1,2 +1,2 @@
-# latin-kiril-bot
-Latin ↔ Kiril telegram bot
+@orgaddel_bot
+
