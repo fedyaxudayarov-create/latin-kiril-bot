@@ -9,9 +9,7 @@ from telebot import types
 # =========================
 # 1) SOZLAMA
 # =========================
-TOKEN = os.getenv("BOT1_TOKEN")
-if not TOKEN:
-    raise RuntimeError("BOT1_TOKEN topilmadi")
+TOKEN = 8358902721:AAGVSmby5bCofPi-JZis2jh6cZtwaXfgy6c)
 
 SECRET_PHRASE = "maxfiy"          # Shu so‘zni yozsa ruxsat beriladi
 ACCESS_FILE = "access.json"       # Ruxsat ro‘yxati shu faylda saqlanadi
@@ -786,4 +784,5 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Xatolik: {e}. 5 soniyadan keyin qayta ulanadi...")
             time.sleep(5)
+
 
