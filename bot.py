@@ -9,8 +9,9 @@ from telebot import types
 # =========================
 # 1) SOZLAMA
 # =========================
-TOKEN = "8358902721:AAGVSmby5bCofPi-JZis2jh6cZtwaXfgy6c"  # Masalan: 1234567890:AA...  (BotFather dan)
-bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
+TOKEN = os.getenv("BOT1_TOKEN")
+if not TOKEN:
+    raise RuntimeError("BOT1_TOKEN topilmadi. Railway Variables ga kiriting.")
 
 SECRET_PHRASE = "maxfiy"          # Shu so‘zni yozsa ruxsat beriladi
 ACCESS_FILE = "access.json"       # Ruxsat ro‘yxati shu faylda saqlanadi
@@ -785,3 +786,4 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Xatolik: {e}. 5 soniyadan keyin qayta ulanadi...")
             time.sleep(5)
+
