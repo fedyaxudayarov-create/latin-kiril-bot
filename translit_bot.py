@@ -30,9 +30,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 # =========================
 # SOZLAMALAR
 # =========================
-BOT_TOKEN = os.getenv("BOT2_TOKEN")
-if not BOT_TOKEN:
-    raise RuntimeError("BOT2_TOKEN topilmadi. Railway Variables ga kiriting.")
+BOT_TOKEN = "8334778816:AAGjZ2lC0VUOICgZGjQRqjMB7Phaf2t54bM"
 
 WORKDIR = "work"
 os.makedirs(WORKDIR, exist_ok=True)
@@ -212,4 +210,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
