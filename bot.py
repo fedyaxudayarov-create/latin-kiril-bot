@@ -10,12 +10,14 @@ from telebot import types
 # 1) SOZLAMA
 # =========================
 # Yangi tokeningiz joylashtirildi
-import os
 TOKEN = os.getenv("BOT_TOKEN")
-bot = telebot.TeleBot(TOKEN)
-SECRET_PHRASE = "1111"          # Shu so‘zni yozsa ruxsat beriladi
-ACCESS_FILE = "access.json"       # Ruxsat ro‘yxati shu faylda saqlanadi
+if not TOKEN:
+    raise ValueError("BOT_TOKEN topilmadi! Railway Variables'ga BOT_TOKEN qo‘ying.")
 
+bot = telebot.TeleBot(TOKEN)
+
+SECRET_PHRASE = "1111"          # Shu so‘zni yozsa ruxsat beriladi
+ACCESS_FILE = "access.json"     # Ruxsat ro‘yxati shu faylda saqlanadi
 # =========================
 # 2) CYRILLIC -> LATIN (Uzbekcha)
 # =========================
@@ -782,10 +784,12 @@ if __name__ == "__main__":
     print("Bot tizimi ishga tushdi...")
     while True:
         try:
+            bot.remove_webhook()
             bot.polling(none_stop=True, interval=0, timeout=60)
         except Exception as e:
             print(f"Xatolik: {e}. 5 soniyadan keyin qayta ulanadi...")
             time.sleep(5)
+
 
 
 
