@@ -10,7 +10,8 @@ from telebot import types
 # 1) SOZLAMA
 # =========================
 # Yangi tokeningiz joylashtirildi
-TOKEN = '8358902721:AAGyeX-g7UG2iyMZusXLlaKfw9e1msUy66Q'
+import os
+TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 SECRET_PHRASE = "1111"          # Shu so‘zni yozsa ruxsat beriladi
 ACCESS_FILE = "access.json"       # Ruxsat ro‘yxati shu faylda saqlanadi
@@ -785,6 +786,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Xatolik: {e}. 5 soniyadan keyin qayta ulanadi...")
             time.sleep(5)
+
 
 
 
