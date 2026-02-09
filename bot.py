@@ -779,17 +779,18 @@ def handle_all(m):
     bot.send_message(m.chat.id, "Iltimos, menyudan foydalaning.", reply_markup=main_menu())
 
 # =========================
-# 14) RUN (o‘chmaydi)
+# RUN (Railway uchun majburiy)
 # =========================
 if __name__ == "__main__":
-    print("Bot tizimi ishga tushdi...")
+    print("Bot ishga tushdi...")
     while True:
         try:
             bot.remove_webhook()
             bot.polling(none_stop=True, interval=0, timeout=60)
         except Exception as e:
-            print(f"Xatolik: {e}. 5 soniyadan keyin qayta ulanadi...")
+            print(f"Xatolik: {e}")
             time.sleep(5)
+
 
 
 
