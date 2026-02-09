@@ -7,17 +7,18 @@ import telebot
 from telebot import types
 
 # =========================
+# =========================
 # 1) SOZLAMA
 # =========================
-# Yangi tokeningiz joylashtirildi
+
 TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
     raise ValueError("BOT_TOKEN topilmadi! Railway Variables'ga BOT_TOKEN qo‘ying.")
 
 bot = telebot.TeleBot(TOKEN)
 
-SECRET_PHRASE = "1111"          # Shu so‘zni yozsa ruxsat beriladi
-ACCESS_FILE = "access.json"     # Ruxsat ro‘yxati shu faylda saqlanadi
+SECRET_PHRASE = "1111"
+ACCESS_FILE = "access.json"
 # =========================
 # 2) CYRILLIC -> LATIN (Uzbekcha)
 # =========================
@@ -789,6 +790,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Xatolik: {e}. 5 soniyadan keyin qayta ulanadi...")
             time.sleep(5)
+
 
 
 
