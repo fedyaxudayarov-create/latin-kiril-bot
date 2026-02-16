@@ -122,7 +122,7 @@ STAFF = {
     "S.Turgunov":{"name":"Турғунов Сардорбек Усубжон ўғли","role":"Ёшлар сиёсати бўйича бош мутахассис","phone":"99-027-02-03","group":"apparat"},
     "I.Abdullayeva":{"name":"Абдуллаева Ирода Хусниддиновна","role":"Оила ва хотин-қизлар бўлими етакчи мутахассис","phone":"93-405-12-26","group":"apparat"},
     "A.Qirgizboyev":{"name":"Қирғизбоев Анваржон Хабибуллаевич","role":"Марказлашган ҳисобхона бош ҳисобчиси","phone":"93-491-80-11","group":"apparat"},
-    "Vacant":{"name":"Вакант","role":"Бош юристконсульт","phone":"50-008-89-00","group":"apparat"},
+    "I.Isakbayev":{"name":"Исакбаев Исломжон","role":"Бош юристконсульт","phone":"97-375-22-33","group":"apparat"},
     "Sh.Valijonov":{"name":"Валижонов Шерзод Абдимўмин ўғли","role":"Ҳоким ёрдамчиси","phone":"97-373-74-74","group":"apparat"},
     "U.Xasanov":{"name":"Хасанов Умиджон Иброхимжон ўғли","role":"Рақамли иқтисодиёт лойиҳа менежери","phone":"97-826-66-88","group":"apparat"},
     "U.Yaqubjanov":{"name":"Якубжанов Усубжон Махамаджонович","role":"Қишлоқ ва сув хўжалиги бош мутахассиси","phone":"93-911-89-45","group":"apparat"},
@@ -156,7 +156,7 @@ ORGS = {
         {"name":"Болтабоев Ботиржон Бахриддинович","role":"Obodonlashtirish boshqarmasi boshlig‘i","phone":"94-504-87-47"},
         {"name":"Vakant","role":"Yo‘llardan foydalanish UK direktori","phone":""},
         {"name":"Курбоналиев Кудрат Хондамирович","role":"Suv ta’minoti bo‘limi rahbari","phone":"94-453-50-00"},
-        {"name":"Vakant","role":"Uy-joy qurilish bo‘limi boshlig‘i","phone":""},
+        {"name":"Турғунов Отабек Собитович","role":"Uy-joy qurilish bo‘limi boshlig‘i","phone":"91-367-00-08"},
         {"name":"Мирзаахмедов Атхамжон","role":"Kadastr agentligi bo‘limi rahbari","phone":"50-073-95-39"},
         {"name":"Муродуллаев Абдулло Убайдулло ўғли","role":"Kadastr palatasi tuman filiali rahbari","phone":"99-027-02-03"},
         {"name":"Жалолов Камолдин Жамолдинович","role":"Toza hudud DUK","phone":"94-309-40-37"},
@@ -167,14 +167,14 @@ ORGS = {
         {"name":"Тўламирзаев Бобуржон Турғунмирзаевич","role":"Mahallalar uyushmasi tuman bo‘limi","phone":"97-592-13-83"},
         {"name":"Асқаров Шерзод Қурбанович","role":"Inson ijtimoiy xizmatlar markazi","phone":"93-925-77-40"},
         {"name":"Жўрахўжаев Тошпўлатхўжа","role":"Maktabgacha va maktab ta’limi bo‘limi","phone":"94-505-04-05"},
-        {"name":"Махкамова Зухра Турсунпўлатована","role":"1-sonli kasb-hunar maktabi direktori","phone":"97-250-64-17"},
-        {"name":"Мусаева Шохиста Садриддиновна","role":"2-sonli kasb-hunar maktabi direktori","phone":"93-924-57-75"},
-        {"name":"Vakant","role":"Kasb-hunarga o‘qitish markazi direktori","phone":""},
-        {"name":"Қодиров Азамжон Мухамматович","role":"Sanoat texnologiyalari texnikumi direktori","phone":"93-673-05-95"},
+        {"name":"Махкамова Зухра Турсунпўлатована","role":"1-sonli Texnikom direktori","phone":"97-250-64-17"},
+        {"name":"Мусаева Шохиста Садриддиновна","role":"4-sonli Texnikom direktori","phone":"93-924-57-75"},
+        {"name":"Абдуллаев Дилмурод Шермирзаевич","role":"2-sonli Texnikom direktori","phone":""},
+        {"name":"Қодиров Азамжон Мухамматович","role":"3-sonli Texnikom direktori","phone":"93-673-05-95"},
         {"name":"Эргашева Сурайё Адхамовна","role":"12-sonli musiqa va san’at maktabi direktori","phone":"94-506-77-16"},
         {"name":"Мамадалиева Наргиза","role":"19-sonli musiqa va san’at maktabi direktori","phone":"88-270-89-88"},
         {"name":"Исманов Умиджон","role":"20-sport maktab","phone":"99-843-70-70"},
-        {"name":"Vakant","role":"46-sonli maxsus maktab-internat direktori","phone":""},
+        {"name":"Джапаров Садриддин Абдумўминович","role":"46-sonli maxsus maktab-internat direktori","phone":"97-256-71-75"},
         {"name":"Норхонов Мамасоли","role":"“Vatanparvar” o‘quv sport klub boshlig‘i","phone":"97-374-77-97"},
         {"name":"Мамадалиева Маҳфиратхон Холиқовна","role":"San-epid markazi rahbari","phone":"94-272-17-75"},
         {"name":"Қодирова Башорат","role":"Tibbiyot birlashmasi boshlig‘i","phone":"94-271-99-86"},
@@ -193,7 +193,7 @@ ORGS = {
         {"name":"Хасанов Тохиржон Журахонович","role":"Agropilla MChJ raisi","phone":"94-150-14-65"},
         {"name":"Таджиддинов Дилмурод Одилович","role":"Paxta-to‘qimachilik klaster rahbari (bosh agronom)","phone":"94-500-02-82"},
         {"name":"Қосимов Аъзимжон Мўдинович","role":"G‘alla klaster rahbari","phone":"94-277-88-41"},
-        {"name":"Махкамов Нуриддин","role":"Fermerlar kengashi raisi","phone":"94-272-17-75"},
+        {"name":"Дадаханов Баходир Сотиболдиевич","role":"Fermerlar kengashi raisi","phone":"94-597-34-43"},
         {"name":"Мамадалиев Даврон","role":"Agroinspeksiya bo‘limi boshlig‘i","phone":"94-303-27-57"},
         {"name":"Тошбоев Ривожжиддин Исомиддинович","role":"Suv xo‘jaligi bo‘limi","phone":"94-274-30-30"},
         {"name":"Vakant","role":"O‘simliklar karantini bo‘limi boshlig‘i","phone":""},
@@ -790,6 +790,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Xatolik: {e}")
             time.sleep(5)
+
 
 
 
