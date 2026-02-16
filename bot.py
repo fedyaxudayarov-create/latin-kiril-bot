@@ -161,7 +161,7 @@ ORGS = {
         {"name":"Муродуллаев Абдулло Убайдулло ўғли","role":"Kadastr palatasi tuman filiali rahbari","phone":"99-027-02-03"},
         {"name":"Жалолов Камолдин Жамолдинович","role":"Toza hudud DUK","phone":"94-309-40-37"},
         {"name":"Ахмедов Шухрат Зокирович","role":"Telekom bog‘lanmasi boshlig‘i","phone":"99-975-09-16"},
-        {"name":"Ахмадалиев Дилшод Нўмонжонович","role":"Atrof-muhit muhofazasi bo‘limi rahbari","phone":"94-175-82-25"},
+        {"name":"Юсуфжанов Анваржон Обиджон ўғли","role":"Atrof-muhit muhofazasi bo‘limi rahbari","phone":"94-302-14-14"},
     ],
     "Ijtimoiy bo‘lim": [
         {"name":"Тўламирзаев Бобуржон Турғунмирзаевич","role":"Mahallalar uyushmasi tuman bo‘limi","phone":"97-592-13-83"},
@@ -790,6 +790,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Xatolik: {e}")
             time.sleep(5)
+
 
 
 
