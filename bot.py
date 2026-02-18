@@ -158,7 +158,7 @@ ORGS = {
         {"name":"Курбоналиев Кудрат Хондамирович","role":"Suv ta’minoti bo‘limi rahbari","phone":"94-453-50-00"},
         {"name":"Турғунов Отабек Собитович","role":"Uy-joy qurilish bo‘limi boshlig‘i","phone":"91-367-00-08"},
         {"name":"Мирзаахмедов Атхамжон","role":"Kadastr agentligi bo‘limi rahbari","phone":"50-073-95-39"},
-        {"name":"Муродуллаев Абдулло Убайдулло ўғли","role":"Kadastr palatasi tuman filiali rahbari","phone":"99-027-02-03"},
+        {"name":"Муродуллаев Абдулло Убайдулло ўғли","role":"Kadastr palatasi tuman filiali rahbari","phone":"94-157-77-87"},
         {"name":"Жалолов Камолдин Жамолдинович","role":"Toza hudud DUK","phone":"94-309-40-37"},
         {"name":"Ахмедов Шухрат Зокирович","role":"Telekom bog‘lanmasi boshlig‘i","phone":"99-975-09-16"},
         {"name":"Юсуфжанов Анваржон Обиджон ўғли","role":"Atrof-muhit muhofazasi bo‘limi rahbari","phone":"94-302-14-14"},
@@ -790,6 +790,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Xatolik: {e}")
             time.sleep(5)
+
 
 
 
