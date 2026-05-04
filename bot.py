@@ -191,7 +191,7 @@ ORGS = {
         {"name":"Абдуллаев Бахтиёр Абдусаломович","role":"Qishloq xo‘jaligi bo‘limi boshlig‘i","phone":"+998-93-492-66-66"},
         {"name":"Расулов Мирвохид Мирсодиқ ўғли","role":"Veterinariya bo‘limi boshlig‘i","phone":"+998-99-781-10-50"},
         {"name":"Хасанов Тохиржон Журахонович","role":"Agropilla MChJ raisi","phone":"+998-94-150-14-65"},
-        {"name":"Таджиддинов Дилмурод Одилович","role":"Paxta-to‘qimachilik klaster rahbari (bosh agronom)","phone":"+998-94-500-02-82"},
+        {"name":"Турсунбоев Мухаммаджон","role":"Agrasanoatni rivojlantirish agentligi Uchqorgon tumani bosh mutaxassisi","phone":"+998-94-444-64-92"},
         {"name":"Қосимов Аъзимжон Мўдинович","role":"G‘alla klaster rahbari","phone":"+998-94-277-88-41"},
         {"name":"Дадаханов Баходир Сотиболдиевич","role":"Fermerlar kengashi raisi","phone":"+998-94-597-34-43"},
         {"name":"Мамадалиев Даврон","role":"Agroinspeksiya bo‘limi boshlig‘i","phone":"+998-94-303-27-57"},
