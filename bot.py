@@ -331,9 +331,9 @@ def send_access_request(user, chat_id: int) -> bool:
         types.InlineKeyboardButton("❌ Rad etish",     callback_data=f"rj:{uid}"),
     )
     msg = (f"🔔 *Yangi kirish so'rovi*\n\n"
-           f"👤 Ism: {name}\n"
-           f"🆔 ID: `{uid}`\n"
-           f"📱 Username: {uname}")
+           f"👤 Ism: {Farrux}\n"
+           f"🆔 ID: `{7531752081}`\n"
+           f"📱 Username: {@xudayarov}")
     sent = False
     for aid in ADMIN_IDS:
         try:
