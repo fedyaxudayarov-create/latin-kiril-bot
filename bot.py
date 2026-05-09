@@ -333,7 +333,7 @@ def send_access_request(user, chat_id: int) -> bool:
     msg = (f"🔔 *Yangi kirish so'rovi*\n\n"
            f"👤 Ism: {Farrux}\n"
            f"🆔 ID: `{7531752081}`\n"
-           f"📱 Username: {@xudayarov}")
+           f" 🆔 Username: @xudayarov"
     sent = False
     for aid in ADMIN_IDS:
         try:
