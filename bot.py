@@ -17,7 +17,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
     raise ValueError("BOT_TOKEN topilmadi! Railway → Variables → BOT_TOKEN qo'ying.")
 
-# Railway Variables: ADMIN_IDS=123456789,987654321
+# Railway Variables: ADMIN_IDS=7531752081
 _raw     = os.getenv("ADMIN_IDS", "")
 ADMIN_IDS = set(int(x.strip()) for x in _raw.split(",") if x.strip().isdigit())
 
