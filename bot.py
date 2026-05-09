@@ -1,202 +1,232 @@
 # -*- coding: utf-8 -*-
-import time
-import json
-import os
-import re
+# latin-kiril-bot v2.0
+# Yangiliklar:
+#   ✅ "1111" parol o'chirildi → Admin tasdiqlash tizimi
+#   ✅ STAFF/ORGS data.json da saqlanadi (kod o'zgartirmasdan tahrirlash)
+#   ✅ /admin paneli: foydalanuvchilar, kutayotganlar, hokimiyat, tashkilotlar
+#   ✅ Xodim ism/lavozim/tel ni botdan o'zgartirish imkoniyati
+
+import time, json, os, re
 import telebot
 from telebot import types
 
-# =========================
-# =========================
-# 1) SOZLAMA
-# =========================
-
+# ============================================================
+# 1. SOZLAMA
+# ============================================================
 TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
-    raise ValueError("BOT_TOKEN topilmadi! Railway Variables'ga BOT_TOKEN qo‘ying.")
+    raise ValueError("BOT_TOKEN topilmadi! Railway → Variables → BOT_TOKEN qo'ying.")
+
+# Railway Variables: ADMIN_IDS=123456789,987654321
+_raw     = os.getenv("ADMIN_IDS", "")
+ADMIN_IDS = set(int(x.strip()) for x in _raw.split(",") if x.strip().isdigit())
 
 bot = telebot.TeleBot(TOKEN)
 
-SECRET_PHRASE = "1111"
-ACCESS_FILE = "access.json"
-# =========================
-# 2) CYRILLIC -> LATIN (Uzbekcha)
-# =========================
+ACCESS_FILE  = "access.json"
+PENDING_FILE = "pending.json"
+DATA_FILE    = "data.json"
+
+# ============================================================
+# 2. CYRILLIC → LATIN
+# ============================================================
 def cyr_to_lat(text: str) -> str:
     if not text:
         return ""
     repl = {
-        "А":"A","а":"a","Б":"B","б":"b","В":"V","в":"v","Г":"G","г":"g","Д":"D","д":"d",
-        "Е":"E","е":"e","Ё":"Yo","ё":"yo","Ж":"J","ж":"j","З":"Z","з":"z","И":"I","и":"i",
-        "Й":"Y","й":"y","К":"K","к":"k","Л":"L","л":"l","М":"M","м":"m","Н":"N","н":"n",
-        "О":"O","о":"o","П":"P","п":"p","Р":"R","р":"r","С":"S","с":"s","Т":"T","т":"t",
-        "У":"U","у":"u","Ф":"F","ф":"f","Х":"X","х":"x","Ц":"Ts","ц":"ts","Ч":"Ch","ч":"ch",
-        "Ш":"Sh","ш":"sh","Ъ":"","ъ":"","Ь":"","ь":"","Ы":"I","ы":"i","Э":"E","э":"e",
-        "Ю":"Yu","ю":"yu","Я":"Ya","я":"ya",
-        "Қ":"Q","қ":"q","Ғ":"G‘","ғ":"g‘","Ў":"O‘","ў":"o‘","Ҳ":"H","ҳ":"h",
+        "А":"A","а":"a","Б":"B","б":"b","В":"V","в":"v","Г":"G","г":"g",
+        "Д":"D","д":"d","Е":"E","е":"e","Ё":"Yo","ё":"yo","Ж":"J","ж":"j",
+        "З":"Z","з":"z","И":"I","и":"i","Й":"Y","й":"y","К":"K","к":"k",
+        "Л":"L","л":"l","М":"M","м":"m","Н":"N","н":"n","О":"O","о":"o",
+        "П":"P","п":"p","Р":"R","р":"r","С":"S","с":"s","Т":"T","т":"t",
+        "У":"U","у":"u","Ф":"F","ф":"f","Х":"X","х":"x","Ц":"Ts","ц":"ts",
+        "Ч":"Ch","ч":"ch","Ш":"Sh","ш":"sh","Ъ":"","ъ":"","Ь":"","ь":"",
+        "Ы":"I","ы":"i","Э":"E","э":"e","Ю":"Yu","ю":"yu","Я":"Ya","я":"ya",
+        "Қ":"Q","қ":"q","Ғ":"G'","ғ":"g'","Ў":"O'","ў":"o'","Ҳ":"H","ҳ":"h",
     }
-    def fix_ye(s: str) -> str:
-        out = []
-        prev_space = True
+    def fix_ye(s):
+        out = []; prev_space = True
         for ch in s:
             if ch in ("Е", "е"):
-                if prev_space:
-                    out.append("Ye" if ch == "Е" else "ye")
-                else:
-                    out.append("e")
+                out.append("Ye" if ch == "Е" else "ye") if prev_space else out.append("e")
             else:
                 out.append(ch)
             prev_space = ch.isspace()
         return "".join(out)
-
     text = fix_ye(text)
     return "".join(repl.get(ch, ch) for ch in text)
 
 def tr(s: str) -> str:
     return cyr_to_lat(s or "")
 
-# =========================
-# 3) ACCESS (maxfiylik)
-# =========================
-def load_allowed() -> set:
-    if os.path.exists(ACCESS_FILE):
-        try:
-            with open(ACCESS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return set(data.get("allowed", []))
-        except Exception:
-            return set()
-    return set()
-
-def save_allowed(allowed_set: set):
-    with open(ACCESS_FILE, "w", encoding="utf-8") as f:
-        json.dump({"allowed": sorted(list(allowed_set))}, f, ensure_ascii=False, indent=2)
-
-ALLOWED = load_allowed()
-
-def is_allowed(user_id: int) -> bool:
-    return user_id in ALLOWED
-
-def ensure_allowed_or_hint(m) -> bool:
-    """
-    True qaytsa -> ruxsat yo‘q (to‘xtatish kerak)
-    False -> ruxsat bor (davom etish mumkin)
-    """
-    if is_allowed(m.from_user.id):
-        return False
-    bot.send_message(
-        m.chat.id,
-        "⛔️ *Ruxsat yo‘q.*\n"
-        "Ruxsat olish uchun @xudayarov bilan bog‘laning."
-    )
-    return True
-
-def grant_access(m):
-    uid = m.from_user.id
-    if uid not in ALLOWED:
-        ALLOWED.add(uid)
-        save_allowed(ALLOWED)
-    bot.send_message(m.chat.id, "✅ Ruxsat berildi. Endi menyudan foydalaning.", reply_markup=main_menu())
-
-# =========================
-# 4) MA'LUMOTLAR (Hokimiyat + Tashkilotlar)
-# =========================
-STAFF = {
-    # Rahbariyat
-    "1 ўринбосар":  {"name":"Носиров Хожиакбар Носиржанович","role":"Молия-иқтисод ва камбағалликни қисқартириш масалалари бўйича биринчи ўринбосар","phone":"+998-91-367-50-05","group":"rahbariyat"},
-    "Қурулиш ўринбосар":{"name":"Абдураимов Лазизбек Обиджон ўғли","role":"Қурилиш, коммуникация, коммунал, экология ва кўкаламзорлаштириш бўйича ўринбосар","phone":"+998-99-974-44-54","group":"rahbariyat"},
-    "Инвиститция ўринбосар":  {"name":"Жўраев Умид Исроил ўғли","role":"Инвестиция ва ташқи савдо бўлими бошлиғи (ўринбосар)","phone":"+998-99-407-84-50","group":"rahbariyat"},
-    "Ижтимоий ўринбосар": {"name":"Махкамов Мухиддин Одилжанович","role":"Ёшлар сиёсати, ижтимоий ва маънавий ишлар бўйича ўринбосар","phone":"+998-93-495-24-14","group":"rahbariyat"},
-    "Қишлоқ хўжалиги ўринбосар": {"name":"Алиматов Фозилжон Абдуқадирович","role":"Қишлоқ ва сув хўжалиги бўйича ўринбосар","phone":"+998-97-594-13-17","group":"rahbariyat"},
-    "Хотин қизлар бўйича ўринбосар":{"name":"Абдуллаева Гулҳаё Абдусаломовна","role":"Оила ва хотин-қизлар бўйича ўринбосар","phone":"+998-99-727-85-55","group":"rahbariyat"},
-
-    # Apparat
-    "ТКГ рахбари":{"name":"Жакбаралиев Анваржон Тохиржанович","role":"Ташкилий–кадрлар гуруҳ раҳбари","phone":"+998-94-492-55-52","group":"apparat"},
-    "ТКГ мутахассис":{"name":"вакант","role":"Ташкилий назорат гуруҳи етакчи мутахассиси","phone":"","group":"apparat"},
-    "Девонхона":{"name":"Юлдашев Хасанбой Махамматкарим ўғли","role":"Девонхона мудири","phone":"+998-93-551-91-15","group":"apparat"},
-    "Чегара":{"name":"Алиханов Хуршид Аъзамжонович","role":"Чегара масалалари бўйича ёрдамчи","phone":"+998-94-508-15-86","group":"apparat"},
-    "Матбуот":{"name":"Мадрахимов Расулжон Кучкорович","role":"Матбуот котиби","phone":"+998-77-029-11-88","group":"apparat"},
-    "Ижро интизоми":{"name":"Маликов Фарход Абдуакимович","role":"Ижро интизоми бўлими","phone":"+998-93-299-55-25","group":"apparat"},
-    "Иқтисод":{"name":"Хамдамов Зокиржон Носиржанович","role":"Молия-иқтисод бўйича бош мутахассис","phone":"+998-88-686-55-50","group":"apparat"},
-    "Қурулиш":{"name":"Абдуғаниев Абобакр Алишер ўғли","role":"Қурилиш/коммунал/экология бўйича бош мутахассис","phone":"+998-94-152-19-93","group":"apparat"},
-    "Ижтимоий":{"name":"Турғунов Сардорбек Усубжон ўғли","role":"Ёшлар сиёсати бўйича бош мутахассис","phone":"+998-99-027-02-03","group":"apparat"},
-    "Хотин қизлар":{"name":"Абдуллаева Ирода Хусниддиновна","role":"Оила ва хотин-қизлар бўлими етакчи мутахассис","phone":"+998-93-405-12-26","group":"apparat"},
-    "Бухгалтерия":{"name":"Қирғизбоев Анваржон Хабибуллаевич","role":"Марказлашган ҳисобхона бош ҳисобчиси","phone":"+998-93-491-80-11","group":"apparat"},
-    "Юрист":{"name":"Исакбаев Исломжон Иброхим ўғли","role":"Бош юристконсульт","phone":"+998-97-375-22-33","group":"apparat"},
-    "Памошник":{"name":"Умаров Сарвар Анваржон ўғли","role":"Ҳоким ёрдамчиси","phone":"+998-94-519-18-11","group":"apparat"},
-    "АКТ":{"name":"Хвакант","role":"Рақамли иқтисодиёт лойиҳа менежери","phone":"+998-00-000-00-00","group":"apparat"},
-    "Қишлоқ хўжалиги":{"name":"Якубжанов Усубжон Махамаджонович","role":"Қишлоқ ва сув хўжалиги бош мутахассиси","phone":"+998-93-911-89-45","group":"apparat"},
-    "Мурожаат":{"name":"Худойбердиев Эльёр Нажмидинович","role":"Мурожаатлар билан ишлаш бўлими етакчи мутахассис","phone":"+998-97-469-70-60","group":"apparat"},
-    "Тил маслахатчи":{"name":"Султанов Азизбек Абдухалимович","role":"Маънавий-маърифий ишлар бўйича маслаҳатчи","phone":"+998-93-949-55-38","group":"apparat"},
-    "Универсал":{"name":"Худаяров Фаррухбек Мухаммадбекович","role":"1-тоифали мутахассис","phone":"+998-94-436-99-59","group":"apparat"},
+# ============================================================
+# 3. DEFAULT MA'LUMOTLAR
+# ============================================================
+DEFAULT_STAFF = {
+    "1 ўринбосар": {
+        "name":"Носиров Хожиакбар Носиржанович",
+        "role":"Молия-иқтисод ва камбағалликни қисқартириш масалалари бўйича биринчи ўринбосар",
+        "phone":"+998-91-367-50-05","group":"rahbariyat"},
+    "Қурулиш ўринбосар": {
+        "name":"Абдураимов Лазизбек Обиджон ўғли",
+        "role":"Қурилиш, коммуникация, коммунал, экология ва кўкаламзорлаштириш бўйича ўринбосар",
+        "phone":"+998-99-974-44-54","group":"rahbariyat"},
+    "Инвиститция ўринбосар": {
+        "name":"Жўраев Умид Исроил ўғли",
+        "role":"Инвестиция ва ташқи савдо бўлими бошлиғи (ўринбосар)",
+        "phone":"+998-99-407-84-50","group":"rahbariyat"},
+    "Ижтимоий ўринбосар": {
+        "name":"Махкамов Мухиддин Одилжанович",
+        "role":"Ёшлар сиёсати, ижтимоий ва маънавий ишлар бўйича ўринбосар",
+        "phone":"+998-93-495-24-14","group":"rahbariyat"},
+    "Қишлоқ хўжалиги ўринбосар": {
+        "name":"Алиматов Фозилжон Абдуқадирович",
+        "role":"Қишлоқ ва сув хўжалиги бўйича ўринбосар",
+        "phone":"+998-97-594-13-17","group":"rahbariyat"},
+    "Хотин қизлар бўйича ўринбосар": {
+        "name":"Абдуллаева Гулҳаё Абдусаломовна",
+        "role":"Оила ва хотин-қизлар бўйича ўринбосар",
+        "phone":"+998-99-727-85-55","group":"rahbariyat"},
+    "ТКГ рахбари": {
+        "name":"Жакбаралиев Анваржон Тохиржанович",
+        "role":"Ташкилий–кадрлар гуруҳ раҳбари",
+        "phone":"+998-94-492-55-52","group":"apparat"},
+    "ТКГ мутахассис": {
+        "name":"вакант",
+        "role":"Ташкилий назорат гуруҳи етакчи мутахассиси",
+        "phone":"","group":"apparat"},
+    "Девонхона": {
+        "name":"Юлдашев Хасанбой Махамматкарим ўғли",
+        "role":"Девонхона мудири",
+        "phone":"+998-93-551-91-15","group":"apparat"},
+    "Чегара": {
+        "name":"Алиханов Хуршид Аъзамжонович",
+        "role":"Чегара масалалари бўйича ёрдамчи",
+        "phone":"+998-94-508-15-86","group":"apparat"},
+    "Матбуот": {
+        "name":"Мадрахимов Расулжон Кучкорович",
+        "role":"Матбуот котиби",
+        "phone":"+998-77-029-11-88","group":"apparat"},
+    "Ижро интизоми": {
+        "name":"Маликов Фарход Абдуакимович",
+        "role":"Ижро интизоми бўлими",
+        "phone":"+998-93-299-55-25","group":"apparat"},
+    "Иқтисод": {
+        "name":"Хамдамов Зокиржон Носиржанович",
+        "role":"Молия-иқтисод бўйича бош мутахассис",
+        "phone":"+998-88-686-55-50","group":"apparat"},
+    "Қурулиш": {
+        "name":"Абдуғаниев Абобакр Алишер ўғли",
+        "role":"Қурилиш/коммунал/экология бўйича бош мутахассис",
+        "phone":"+998-94-152-19-93","group":"apparat"},
+    "Ижтимоий": {
+        "name":"Турғунов Сардорбек Усубжон ўғли",
+        "role":"Ёшлар сиёсати бўйича бош мутахассис",
+        "phone":"+998-99-027-02-03","group":"apparat"},
+    "Хотин қизлар": {
+        "name":"Абдуллаева Ирода Хусниддиновна",
+        "role":"Оила ва хотин-қизлар бўлими етакчи мутахассис",
+        "phone":"+998-93-405-12-26","group":"apparat"},
+    "Бухгалтерия": {
+        "name":"Қирғизбоев Анваржон Хабибуллаевич",
+        "role":"Марказлашган ҳисобхона бош ҳисобчиси",
+        "phone":"+998-93-491-80-11","group":"apparat"},
+    "Юрист": {
+        "name":"Исакбаев Исломжон Иброхим ўғли",
+        "role":"Бош юристконсульт",
+        "phone":"+998-97-375-22-33","group":"apparat"},
+    "Памошник": {
+        "name":"Умаров Сарвар Анваржон ўғли",
+        "role":"Ҳоким ёрдамчиси",
+        "phone":"+998-94-519-18-11","group":"apparat"},
+    "АКТ": {
+        "name":"вакант",
+        "role":"Рақамли иқтисодиёт лойиҳа менежери",
+        "phone":"+998-00-000-00-00","group":"apparat"},
+    "Қишлоқ хўжалиги": {
+        "name":"Якубжанов Усубжон Махамаджонович",
+        "role":"Қишлоқ ва сув хўжалиги бош мутахассиси",
+        "phone":"+998-93-911-89-45","group":"apparat"},
+    "Мурожаат": {
+        "name":"Худойбердиев Эльёр Нажмидинович",
+        "role":"Мурожаатлар билан ишлаш бўлими етакчи мутахассис",
+        "phone":"+998-97-469-70-60","group":"apparat"},
+    "Тил маслахатчи": {
+        "name":"Султанов Азизбек Абдухалимович",
+        "role":"Маънавий-маърифий ишлар бўйича маслаҳатчи",
+        "phone":"+998-93-949-55-38","group":"apparat"},
+    "Универсал": {
+        "name":"Худаяров Фаррухбек Мухаммадбекович",
+        "role":"1-тоифали мутахассис",
+        "phone":"+998-94-436-99-59","group":"apparat"},
 }
 
-ORGS = {
-    "Iqtisodiy bo‘lim": [
+DEFAULT_ORGS = {
+    "Iqtisodiy bo'lim": [
         {"name":"Мамажонов Шухрат Умматович","role":"Tuman DSI rahbari","phone":"+998-99-371-25-55"},
-        {"name":"Юсупов Латифжон Исмонжанович","role":"Agrobank tuman filiali boshlig‘i","phone":"+998-97-250-00-30"},
+        {"name":"Юсупов Латифжон Исмонжанович","role":"Agrobank tuman filiali boshlig'i","phone":"+998-97-250-00-30"},
         {"name":"Турғунмирзаев Аброр","role":"Biznesni rivojlantirish bank filiali boshqaruvchisi","phone":"+998-88-100-01-06"},
         {"name":"вакант","role":"Milliy bank filiali boshqaruvchisi","phone":"+998-00-000-00-00"},
         {"name":"Жўраев Ойбек Исроилжанович","role":"Xalq bank filiali boshqaruvchisi","phone":"+998-91-369-01-00"},
-        {"name":"вакант","role":"Iqtisodiyot va moliya bo‘limi 1-o‘rinbosari","phone":""},
-        {"name":"Тожибоев Жасурбек Ғуломжон ўғли","role":"G‘aznachilik bo‘linmasi boshlig‘i","phone":"+998-97-231-15-53"},
-        {"name":"Мансуров Зокиржон Абдухошимович","role":"Pensiya jamg‘armasi tuman bo‘limi","phone":"+998-94-414-22-11"},
-        {"name":"Камолов Жобирхон Боходирхўжа ўғли","role":"Statistika bo‘limi boshlig‘i","phone":"+998-94-506-84-58"},
-        {"name":"Абдуллаев Равшанжон Комилжонович","role":"Kambag‘allikni qisqartirish va bandlik bo‘limi","phone":"+998-97-427-01-90"},
+        {"name":"вакант","role":"Iqtisodiyot va moliya bo'limi 1-o'rinbosari","phone":""},
+        {"name":"Тожибоев Жасурбек Ғуломжон ўғли","role":"G'aznachilik bo'linmasi boshlig'i","phone":"+998-97-231-15-53"},
+        {"name":"Мансуров Зокиржон Абдухошимович","role":"Pensiya jamg'armasi tuman bo'limi","phone":"+998-94-414-22-11"},
+        {"name":"Камолов Жобирхон Боходирхўжа ўғли","role":"Statistika bo'limi boshlig'i","phone":"+998-94-506-84-58"},
+        {"name":"Абдуллаев Равшанжон Комилжонович","role":"Kambag'allikni qisqartirish va bandlik bo'limi","phone":"+998-97-427-01-90"},
         {"name":"Юлдашев Мирзохид Абдулвохидович","role":"Dehqon bozor MChJ rahbari","phone":"+998-97-090-55-44"},
-        {"name":"Узоқов Шухратжон Садриддинович","role":"Qo‘g‘ay bozor MChJ rahbari","phone":"+998-99-027-00-50"},
+        {"name":"Узоқов Шухратжон Садриддинович","role":"Qo'g'ay bozor MChJ rahbari","phone":"+998-99-027-00-50"},
         {"name":"Иномова Наргиза","role":"Tuman davlat arxivi","phone":"+998-93-834-50-98"},
         {"name":"Жўраев Алимардон Абдуманнопович","role":"Shaxsiy tarkib arxivi","phone":"+998-94-179-11-02"},
         {"name":"Пардабаев Илёсжон Акмалович","role":"Davlat xizmatlari markazi direktori","phone":"+998-94-274-74-00"},
         {"name":"Тўҳтақулов Исломжон","role":"Savdo-sanoat palatasi","phone":"+998-97-156-95-10"},
     ],
-    "Qurilish bo‘lim": [
-        {"name":"Дехканов Нематжон Акрамжанович","role":"Elektr ta’minoti korxonasi boshlig‘i","phone":"+998-94-126-44-00"},
-        {"name":"Махмудов Жахонгир Саидхўжа ўғли","role":"“Uchqo‘rg‘ontumangaz” bosh muhandisi","phone":"+998-94-508-99-44"},
-        {"name":"Болтабоев Ботиржон Бахриддинович","role":"Obodonlashtirish boshqarmasi boshlig‘i","phone":"+998-94-504-87-47"},
-        {"name":"Рустамов Шавкатжон","role":"Yo‘llardan foydalanish UK direktori","phone":"+998-94-300-00-76"},
-        {"name":"Курбоналиев Кудрат Хондамирович","role":"Suv ta’minoti bo‘limi rahbari","phone":"+998-94-453-50-00"},
-        {"name":"Турғунов Отабек Собитович","role":"Uy-joy qurilish bo‘limi boshlig‘i","phone":"+998-91-367-00-08"},
-        {"name":"вакант","role":"Kadastr agentligi bo‘limi rahbari","phone":""},
+    "Qurilish bo'lim": [
+        {"name":"Дехканов Нематжон Акрамжанович","role":"Elektr ta'minoti korxonasi boshlig'i","phone":"+998-94-126-44-00"},
+        {"name":"Махмудов Жахонгир Саидхўжа ўғли","role":"Uchqo'rg'ontumangaz bosh muhandisi","phone":"+998-94-508-99-44"},
+        {"name":"Болтабоев Ботиржон Бахриддинович","role":"Obodonlashtirish boshqarmasi boshlig'i","phone":"+998-94-504-87-47"},
+        {"name":"Рустамов Шавкатжон","role":"Yo'llardan foydalanish UK direktori","phone":"+998-94-300-00-76"},
+        {"name":"Курбоналиев Кудрат Хондамирович","role":"Suv ta'minoti bo'limi rahbari","phone":"+998-94-453-50-00"},
+        {"name":"Турғунов Отабек Собитович","role":"Uy-joy qurilish bo'limi boshlig'i","phone":"+998-91-367-00-08"},
+        {"name":"вакант","role":"Kadastr agentligi bo'limi rahbari","phone":""},
         {"name":"Муродуллаев Абдулло Убайдулло ўғли","role":"Kadastr palatasi tuman filiali rahbari","phone":"+998-94-157-77-87"},
-        {"name":"Жалолов  Камолдин Жамолдинович","role":"Toza hudud DUK","phone":"+998-94-307-77-22"},
+        {"name":"Жалолов Камолдин Жамолдинович","role":"Toza hudud DUK","phone":"+998-94-307-77-22"},
         {"name":"Тожибоев Қодиржон","role":"Қишлоқ сув бўлими бошлиғи","phone":"+998-93-911-89-45"},
-        {"name":"Юсуфжанов Анваржон Обиджон ўғли","role":"Atrof-muhit muhofazasi bo‘limi rahbari","phone":"+998-94-302-14-14"},
+        {"name":"Юсуфжанов Анваржон Обиджон ўғли","role":"Atrof-muhit muhofazasi bo'limi rahbari","phone":"+998-94-302-14-14"},
     ],
-    "Ijtimoiy bo‘lim": [
-        {"name":"Тўламирзаев Бобуржон Турғунмирзаевич","role":"Mahallalar uyushmasi tuman bo‘limi","phone":"+998-97-592-13-83"},
+    "Ijtimoiy bo'lim": [
+        {"name":"Тўламирзаев Бобуржон Турғунмирзаевич","role":"Mahallalar uyushmasi tuman bo'limi","phone":"+998-97-592-13-83"},
         {"name":"Асқаров Шерзод Қурбанович","role":"Inson ijtimoiy xizmatlar markazi","phone":"+998-93-925-77-40"},
-        {"name":"Жўрахўжаев Тошпўлатхўжа Хамиджон ўғли","role":"Maktabgacha va maktab ta’limi bo‘limi","phone":"+998-97-541-11-11"},
+        {"name":"Жўрахўжаев Тошпўлатхўжа Хамиджон ўғли","role":"Maktabgacha va maktab ta'limi bo'limi","phone":"+998-97-541-11-11"},
         {"name":"Махкамова Зухра Турсунпўлатована","role":"1-sonli Texnikom direktori","phone":"+998-97-250-64-17"},
         {"name":"Мусаева Шохиста Садриддиновна","role":"4-sonli Texnikom direktori","phone":"+998-93-924-57-75"},
         {"name":"Абдуллаев Дилмурод Шермирзаевич","role":"2-sonli Texnikom direktori","phone":"+998-97-250-64-17"},
         {"name":"Қодиров Азамжон Мухамматович","role":"3-sonli Texnikom direktori","phone":"+998-93-673-05-95"},
-        {"name":"Эргашева Сурайё Адхамовна","role":"12-sonli musiqa va san’at maktabi direktori","phone":"+998-94-506-77-16"},
-        {"name":"Мамадалиева Наргиза","role":"19-sonli musiqa va san’at maktabi direktori","phone":"+998-88-270-89-88"},
+        {"name":"Эргашева Сурайё Адхамовна","role":"12-sonli musiqa va san'at maktabi direktori","phone":"+998-94-506-77-16"},
+        {"name":"Мамадалиева Наргиза","role":"19-sonli musiqa va san'at maktabi direktori","phone":"+998-88-270-89-88"},
         {"name":"Исманов Умиджон","role":"20-sport maktab","phone":"+998-99-843-70-70"},
         {"name":"Джапаров Садриддин Абдумўминович","role":"46-sonli maxsus maktab-internat direktori","phone":"+998-97-256-71-75"},
-        {"name":"Норхонов Мамасоли","role":"“Vatanparvar” o‘quv sport klub boshlig‘i","phone":"+998-97-374-77-97"},
+        {"name":"Норхонов Мамасоли","role":"Vatanparvar o'quv sport klub boshlig'i","phone":"+998-97-374-77-97"},
         {"name":"Мамадалиева Маҳфиратхон Холиқовна","role":"San-epid markazi rahbari","phone":"+998-94-272-17-75"},
-        {"name":"Қодирова Башорат","role":"Tibbiyot birlashmasi boshlig‘i","phone":"+998-94-271-99-86"},
-        {"name":"Исроилов Достон Одилжонович","role":"Madaniyat bo‘limi direktori","phone":"+998-99-390-69-68"},
-        {"name":"Нажмиддинова Сожида Акрамова","role":"“Yorqin hayot” gazetasi muxbiri","phone":"+998-99-057-66-34"},
+        {"name":"Қодирова Башорат","role":"Tibbiyot birlashmasi boshlig'i","phone":"+998-94-271-99-86"},
+        {"name":"Исроилов Достон Одилжонович","role":"Madaniyat bo'limi direktori","phone":"+998-99-390-69-68"},
+        {"name":"Нажмиддинова Сожида Акрамова","role":"Yorqin hayot gazetasi muxbiri","phone":"+998-99-057-66-34"},
         {"name":"Турсунов Равшан Абдуллаевчи","role":"Agrosanoat kasaba uyushmasi raisi","phone":"+998-94-152-94-80"},
         {"name":"Бобоева Боқия Мирзаевна","role":"Davlat xodimlari kasaba uyushmasi","phone":"+998-93-926-02-50"},
-        {"name":"Ғофуров Абдурасул Рахимжанович","role":"Xalq ta’limi kasaba uyushmasi","phone":"+998-99-976-40-56"},
-        {"name":"Маматқулов Элёр Алимжанович","role":"Bolalar va o‘smirlar sport maktabi direktori","phone":"+998-94-178-85-58"},
-        {"name":"Meliboyev Акрам","role":"Ma’naviyat va ma’rifat markazi tuman bo‘limi","phone":"+998-94-500-04-09"},
+        {"name":"Ғофуров Абдурасул Рахимжанович","role":"Xalq ta'limi kasaba uyushmasi","phone":"+998-99-976-40-56"},
+        {"name":"Маматқулов Элёр Алимжанович","role":"Bolalar va o'smirlar sport maktabi direktori","phone":"+998-94-178-85-58"},
+        {"name":"Meliboyev Акрам","role":"Ma'naviyat va ma'rifat markazi tuman bo'limi","phone":"+998-94-500-04-09"},
         {"name":"Мухаммаджонов Маъмуржон","role":"Yoshlar ishlari agentligi rahbari","phone":"+998-99-776-96-96"},
     ],
-    "Qishloq xo‘jaligi bo‘lim": [
-        {"name":"Абдуллаев Бахтиёр Абдусаломович","role":"Qishloq xo‘jaligi bo‘limi boshlig‘i","phone":"+998-93-492-66-66"},
-        {"name":"Расулов Мирвохид Мирсодиқ ўғли","role":"Veterinariya bo‘limi boshlig‘i","phone":"+998-99-781-10-50"},
+    "Qishloq xo'jaligi bo'lim": [
+        {"name":"Абдуллаев Бахтиёр Абдусаломович","role":"Qishloq xo'jaligi bo'limi boshlig'i","phone":"+998-93-492-66-66"},
+        {"name":"Расулов Мирвохид Мирсодиқ ўғли","role":"Veterinariya bo'limi boshlig'i","phone":"+998-99-781-10-50"},
         {"name":"Хасанов Тохиржон Журахонович","role":"Agropilla MChJ raisi","phone":"+998-94-150-14-65"},
-        {"name":"Турсунбоев Мухаммаджон","role":"Agrasanoatni rivojlantirish agentligi Uchqorgon tumani bosh mutaxassisi","phone":"+998-94-444-64-92"},
-        {"name":"Қосимов Аъзимжон Мўдинович","role":"G‘alla klaster rahbari","phone":"+998-94-277-88-41"},
+        {"name":"Турсунбоев Мухаммаджон","role":"Agrasanoatni rivojlantirish agentligi bosh mutaxassisi","phone":"+998-94-444-64-92"},
+        {"name":"Қосимов Аъзимжон Мўдинович","role":"G'alla klaster rahbari","phone":"+998-94-277-88-41"},
         {"name":"Дадаханов Баходир Сотиболдиевич","role":"Fermerlar kengashi raisi","phone":"+998-94-597-34-43"},
-        {"name":"Мамадалиев Даврон","role":"Agroinspeksiya bo‘limi boshlig‘i","phone":"+998-94-303-27-57"},
-        {"name":"Тошбоев Ривожжиддин Исомиддинович","role":"Suv xo‘jaligi bo‘limi","phone":"+998-94-274-30-30"},
-        {"name":"Ибрагимов Омонулло Лутфуллаевич","role":"O‘simliklar karantini bo‘limi boshlig‘i","phone":"+998-93-674-70-19"},
+        {"name":"Мамадалиев Даврон","role":"Agroinspeksiya bo'limi boshlig'i","phone":"+998-94-303-27-57"},
+        {"name":"Тошбоев Ривожжиддин Исомиддинович","role":"Suv xo'jaligi bo'limi","phone":"+998-94-274-30-30"},
+        {"name":"Ибрагимов Омонулло Лутфуллаевич","role":"O'simliklar karantini bo'limi boshlig'i","phone":"+998-93-674-70-19"},
     ],
     "MMTP raislari": [
         {"name":"Мирзалиев Ёдгор Камолдинович","role":"Madadkor-Hamzaobod","phone":"+998-99-780-52-35"},
@@ -204,156 +234,259 @@ ORGS = {
         {"name":"Мирзаев Мирзохид Якубжанович","role":"Ijodkor-saxovat tex servis","phone":"+998-93-927-25-65"},
         {"name":"Воситов Анваржон Абдувахобович","role":"Baxt mash servis","phone":"+998-94-153-07-65"},
         {"name":"Шерматов Абдуссаттор Ўринбоевич","role":"Yashiqobod elga xizmat","phone":"+998-93-927-10-44"},
-        {"name":"Қамбаров Бобомурод Хакимжановich","role":"Uchqo‘rg‘on porloq yulduzi","phone":"+998-94-174-45-75"},
-        {"name":"Эргашбоев Ирисali Шavkatjon o‘g‘li","role":"Ulug‘bek madadkor","phone":"+998-93-941-17-79"},
-        {"name":"Холматов Нарматali Turdialievich","role":"Yangiobod madadkor","phone":"+998-94-500-02-96"},
-        {"name":"Режабоев Аброр Абдуvahobovich","role":"Qo‘g‘aylik Ismatullaev","phone":"+998-93-776-31-15"},
-        {"name":"Маматқулов Muzaffar Rustmamovich","role":"Dehqon qanoti","phone":"+998-99-919-03-30"},
-        {"name":"Имомқулов Isroil Ergashovich","role":"Oydin-Nurobod","phone":"+998-97-216-04-05"},
-        {"name":"Мамажанов Iqboljon To‘xtapolatovich","role":"Mehnatobod-Dehqonobod","phone":"+998-91-186-80-68"},
-        {"name":"Шоабдуллаев Ismoil Ахmatovich","role":"Oltin vodiy","phone":"+998-94-170-58-12"},
+        {"name":"Қамбаров Бобомурод Хакимжанович","role":"Uchqo'rg'on porloq yulduzi","phone":"+998-94-174-45-75"},
+        {"name":"Эргашбоев Ирисали Шавкатжон ўғли","role":"Ulug'bek madadkor","phone":"+998-93-941-17-79"},
+        {"name":"Холматов Нарматали Турдиалиевич","role":"Yangiobod madadkor","phone":"+998-94-500-02-96"},
+        {"name":"Режабоев Аброр Абдувахобович","role":"Qo'g'aylik Ismatullaev","phone":"+998-93-776-31-15"},
+        {"name":"Маматқулов Музаффар Рустамович","role":"Dehqon qanoti","phone":"+998-99-919-03-30"},
+        {"name":"Имомқулов Исроил Эргашович","role":"Oydin-Nurobod","phone":"+998-97-216-04-05"},
+        {"name":"Мамажанов Иқболжон Тўхтаполатович","role":"Mehnatobod-Dehqonobod","phone":"+998-91-186-80-68"},
+        {"name":"Шоабдуллаев Исмоил Ахматович","role":"Oltin vodiy","phone":"+998-94-170-58-12"},
     ],
 }
 
-# =========================
-# 5) MAHALLA (61 ta) - TSV dan o‘qib dict qilish
-# =========================
-ROLE_META = [
-    ("rais", "Rais", "👤"),
-    ("hokim_yordamchisi", "Hokim yordamchisi", "🧑‍💼"),
-    ("yoshlar_yetakchi", "Yoshlar yetakchisi", "🧑‍🎓"),
-    ("xotin_qizlar", "Xotin-qizlar faoli", "👩‍🦰"),
-    ("ijtimoiy_xodim", "Ijtimoiy xodim", "🤝"),
-    ("dsi", "DSI xodimi", "💰"),
-    ("profilaktika", "Profilaktika inspektori", "🛡️"),
-]
+# ============================================================
+# 4. DATA LOAD / SAVE
+# ============================================================
+def load_data():
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                d     = json.load(f)
+                staff = d.get("staff") or {}
+                orgs  = d.get("orgs")  or {}
+                # Yangi default kalitlarni qo'shamiz
+                for k, v in DEFAULT_STAFF.items():
+                    if k not in staff:
+                        staff[k] = dict(v)
+                for k, v in DEFAULT_ORGS.items():
+                    if k not in orgs:
+                        orgs[k] = [dict(i) for i in v]
+                return staff, orgs
+        except Exception as e:
+            print(f"data.json o'qishda xato: {e}")
+    return ({k: dict(v) for k, v in DEFAULT_STAFF.items()},
+            {k: [dict(i) for i in v] for k, v in DEFAULT_ORGS.items()})
 
+def save_data():
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump({"staff": STAFF, "orgs": ORGS}, f, ensure_ascii=False, indent=2)
+
+STAFF, ORGS = load_data()
+
+# ============================================================
+# 5. ACCESS — Ruxsat tizimi
+# ============================================================
+def load_allowed() -> set:
+    try:
+        with open(ACCESS_FILE, "r", encoding="utf-8") as f:
+            return set(json.load(f).get("allowed", []))
+    except:
+        return set()
+
+def save_allowed():
+    with open(ACCESS_FILE, "w", encoding="utf-8") as f:
+        json.dump({"allowed": sorted(list(ALLOWED))}, f, ensure_ascii=False, indent=2)
+
+ALLOWED = load_allowed()
+
+def is_allowed(uid: int) -> bool:
+    return uid in ALLOWED or uid in ADMIN_IDS
+
+def is_admin(uid: int) -> bool:
+    return uid in ADMIN_IDS
+
+# ============================================================
+# 6. PENDING — Kutayotganlar
+# ============================================================
+def load_pending() -> dict:
+    try:
+        with open(PENDING_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_pending():
+    with open(PENDING_FILE, "w", encoding="utf-8") as f:
+        json.dump(PENDING, f, ensure_ascii=False, indent=2)
+
+PENDING: dict = load_pending()  # {"uid": {id, name, username, chat_id}}
+
+def send_access_request(user, chat_id: int) -> bool:
+    """Adminlarga kirish so'rovini yuborish va foydalanuvchini PENDING ga qo'shish"""
+    uid     = user.id
+    uid_str = str(uid)
+    name    = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Nomsiz"
+    uname   = f"@{user.username}" if user.username else "—"
+
+    PENDING[uid_str] = {
+        "id": uid, "name": name,
+        "username": user.username or "", "chat_id": chat_id
+    }
+    save_pending()
+
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("✅ Ruxsat berish", callback_data=f"ap:{uid}"),
+        types.InlineKeyboardButton("❌ Rad etish",     callback_data=f"rj:{uid}"),
+    )
+    msg = (f"🔔 *Yangi kirish so'rovi*\n\n"
+           f"👤 Ism: {name}\n"
+           f"🆔 ID: `{uid}`\n"
+           f"📱 Username: {uname}")
+    sent = False
+    for aid in ADMIN_IDS:
+        try:
+            bot.send_message(aid, msg, reply_markup=kb, parse_mode="Markdown")
+            sent = True
+        except:
+            pass
+    return sent
+
+# ============================================================
+# 7. STATE
+# ============================================================
+USER_STATE:  dict = {}   # chat_id → {}
+ADMIN_STATE: dict = {}   # admin_id → {}
+
+def set_state(cid, **kw):
+    s = USER_STATE.get(cid, {}); s.update(kw); USER_STATE[cid] = s
+
+def get_state(cid) -> dict:
+    return USER_STATE.get(cid, {})
+
+def set_astate(aid, **kw):
+    ADMIN_STATE[aid] = kw
+
+def get_astate(aid) -> dict:
+    return ADMIN_STATE.get(aid, {})
+
+def clear_astate(aid):
+    ADMIN_STATE.pop(aid, None)
+
+# ============================================================
+# 8. UTILITIES
+# ============================================================
 def normalize_phone(p: str) -> str:
     p = (p or "").strip()
-    if not p:
-        return ""
-    # +998(93)064-26-38 -> +998930642638
-    digits = re.sub(r"[^\d+]", "", p)
-    # ba'zida 998... keladi
-    if digits.startswith("998") and not digits.startswith("+998"):
-        digits = "+" + digits
-    if digits.startswith("+998") and len(digits) < 13:
-        # qolsa - qanday bo‘lsa ham qaytaramiz
-        return digits
-    return digits
+    if not p: return ""
+    d = re.sub(r"[^\d+]", "", p)
+    if d.startswith("998") and not d.startswith("+998"):
+        d = "+" + d
+    return d
 
-# Siz yuborgan jadvalni shu yerga TAB (\t) bilan qo‘yildi.
-# Format: Tr \t MFY \t rais \t tel \t hokim_yordamchi \t tel \t yoshlar \t tel \t xotin-qizlar \t tel \t ijtimoiy \t tel \t dsi \t tel \t profilaktika \t tel
-MAHALLA_TSV = """Tr\tMFY\tRais\tTel\tHokimYordamchi\tTel\tYoshlar\tTel\tXotinQizlar\tTel\tIjtimoiy\tTel\tDSI\tTel\tProfilaktika\tTel
-1\tЧек\tИсманжанов Бекмурод Марипжанович\t+998(93)064-26-38\tЯкубов Азиз Махмудович\t+998(99)510-11-45\tЭсанбоев Абдулвохид\t+998(50)177-62-11\tНишонова Нигора\t+998(93)264-19-79\tМирзаева Насиба Адилжановна\t+998(93)769-72-72\tАбдулхаев Фаррух\t+998(88)212-75-12\tкатта лейтенант Каримов Бобурмирзо Абдуғаффор ўғли\t99893-671-69-69
-2\tУлуғбек\tНизамова Зулфия Юлдашхановна\t+998(94)307-00-90\tИброхимов Шохрух Бахромжон ўғли\t+998(99)796-23-22\tСаидов Бахтиёр\t+998(50)177-58-11\tБоқиева Назирахон Абдумутловна\t+998(94)159-32-09\tНОРМИРЗАЕВ МУРОДЖОН ОЛИМЖОНОВИЧ\t+998(50)307-92-92\tМарипов Рахимжон\t+998(99)320-88-99\tкапитан Солиев Равшанбек Одилович\t99895-273-59-41
-3\tЁшлик\tУбайдуллаев Акмал Хамидуллаевич\t+998(93)165-03-33\tТошпулатов Комилжон Рустамович\t+998(94)863-62-62\tОбидов Эркин\t+998(50)177-38-11\tвакани\t+998(00)000-00-00\tТУРДИМАТОВА ДИЛНОЗ МАХАММАДЖАНОВНА\t+998(94)301-61-30\tАбдурахимов Шавкат\t+998(94)176-90-50\tкапитан Якубов Турсунбой Махамаджонович\t99893-151-53-53
-4\tҚўғай\tДехконов Элдор Зокиржонович\t+998(88)468-88-44\tУсманов Нодирбек Равшанбекович\t+998(93)913-81-82\tАбдуллажонов Жасур\t+998(50)177-45-11\tУразова Гавхарой\t+998(93)605-13-13\tУМАРОВА ФEРУЗА ХАМИДОВНА\t+998(95)072-77-91\tКамалов Уктам\t+998(94)508-96-49\tподполковник Махкамов Махмуджон Абдуқодирович\t99893-676-81-52
-5\tИсломобод\tДехканов Толибжон Одилович\t+998(99)979-15-02\tДавлатов Шавкат Шухрат ўғли\t+998(93)949-13-81\tАбдуқаххаров Хусниддин\t+998(50)177-43-11\tХудайбердиева Ханифа\t+998(99)435-42-61\tТУРСУНОВА МАШХУРА АБДУРАХИМЖАНОВНА\t+998(99)270-92-77\tСарибаев Ихволжон\t+998(94)158-77-27\tмайор Бўтаев Авазбек Абдумуталифович\t99894-302-20-27
-6\tУчёғоч\tДжўраев Шокиржон Абдуқодирович\t+998(93)211-01-36\tКамолов Нодир Қодиржонович\t+998(94)305-99-99\tҚурбонова Мафтуна\t+998(93)415-93-88\tУразова Гавхарой\t+998(93)605-13-13\tМEХМАНОВА МАНЗУРАХОН ИСОҚЖОН ҚИЗИ\t+998(94)902-91-88\tКамалов Уктам\t+998(94)508-96-49\tкатта лейтенант Абдуллажонов Ғайбулло Рахматулло ўғли\t99897-256-92-92
-7\tНаврўз\tАбдуллаев Саходила Махмудович\t+998(93)067-12-06\tКаримов Саидкамол Акмал ўғли\t+998(90)776-44-94\tОлимжанов Абдулазиз\t+998(93)056-36-63\tШокирова Мухаббат\t+998(99)696-62-64\tТУРДАЛИЕВ АСРОРБEК АБДУВАЛИ ЎҒЛИ\t+998(94)153-66-77\tТурғунов Худойшукур\t+998(94)081-50-00\tкапитан Рахимов Дониёр Ёқубжонович\t99894-302-07-17
-8\tНуробод\tТашбаев Авазбек Ботиралиевич\t+998(94)307-77-89\tАбдухалилов Асадилло Хусниддин ўғли\t+998(99)323-68-70\tТурдалиев Акмал\t+998(94)506-44-88\tШокирова Мухаббат\t+998(99)696-62-64\tЭРГАШEВА ГУЛНОЗА АБДУМАЖИДОВНА\t+998(94)990-52-50\tКамалов Уктам\t+998(94)508-96-49\tкатта лейтенант Турғунов Араббой Муротали ўғли\t99897-212-85-94
-9\tНамуна\tБозоров Бахром Камилжанович\t+998(94)507-57-50\tХайдаров Мирзарахмат Илхомжон ўғли\t+998(94)941-00-00\tҚодиржонов Жахонгир\t+998(33)049-59-59\tЮлдашева Гулнора\t+998(99)914-47-48\tАБДУРАХМОНОВА МУХАРРАМХОН ҒУЛАМОВНА\t+998(97)570-74-02\tЖалолхонов Зиёвиддин\t+998(93)914-18-81\tкатта лейтенант Қодиров Абдулазиз Абдулатиф ўғли\t99897-594-45-75
-10\tБирлик\tБозорова Мафтуна Фозилжон қизи\t+998(33)185-02-02\tХабибуллаев Сардорбек Дилшод ўғли\t+998(50)004-59-94\tЙўлдашев Иқболжон\t+998(50)001-40-20\tТожибаева Феруза\t+998(94)927-11-89\tСАИДМАМАТОВА ДИЛБАРХОН АБСАЛОМОВНА\t+998(93)298-23-83\tСарибаев Ихволжон\t+998(94)158-77-27\tкатта лейтенант Сидиқов Жахонгир Юлдашбой ўғли\t99893-187-39-93
-11\tШахрихончек\tАлимов Жасур Райимжонович\t+998(93)673-93-25\tХайдаров Улуғбек Илхомжон ўғли\t+998(95)028-66-66\tҚамбаралиев Азизбек\t+998(93)373-06-07\tМаматхаджаева Нодира\t+998(94)271-59-71\tКАМАЛОВА ДИЛНОЗА ЛУТФИДДИНОВНА\t+998(94)792-20-84\tАхмедов Файзуллахўжа\t+998(97)654-95-28\tлейтенант Азларханов Ойбек Одилжон ўғли\t99893-244-03-33
-12\tҚўғай ўлмас\tКурбонова Мархабо Исмоиловна\t+998(93)493-68-29\tМаврулов Исроилжон Нематжонович\t+998(93)264-80-07\tЎсарбоев Алимардон\t+998(88)688-85-98\tМаматхаджаева Нодира\t+998(94)271-59-71\tАБДУЛЛАЕВА ШОХЗОДА АБДУРАХИМОВНА\t+998(94)908-98-76\tАхмедов Файзуллахўja\t+998(97)654-95-28\tкапитан Пулатов Элмурод Бахриддин ўғли\t99893-943-11-94
-13\tЁрқинбойчек\tКодирова Одина Мирхамитовна\t+998(94)509-73-74\tДжалилов Қахрамон Рустамжанович\t+998(97)231-88-82\tХолмухаммедов Сарварбек\t+998(93)825-31-25\tСиддиқова Айшахон\t+998(93)409-96-65\tВакант\t\tАхмедов Файзуллахўja\t+998(97)654-95-28\tкатта лейтенант Нарзуллаев Шавкатжон Файзулло ўғли\t99894-303-40-10
-14\tБахриобод\tМирзаахмедов Қудратжон Акбаралиевич\t+998(94)170-86-48\tИсомиддинов Абдумажid Абдухалilovич\t+998(97)372-74-22\tАхмаджонов Яхё\t+998(93)482-42-22\tСиддиқova Айшахон\t+998(93)409-96-65\tСАФАРАЛИЕВА ФEЪРУЗА ХУСАНБОЙ ҚИЗИ\t+998(94)429-92-25\tАхмедов Файzullaxo‘ja\t+998(97)654-95-28\tкатta лейтенант Фозилов Жасурbek Нозimjon o‘g‘li\t99894-154-99-48
-15\tОбод\tМамасолиев Жахонгир Алижонович\t+998(99)089-02-33\tҚурбонов Бобур Мухитдинович\t+998(93)611-00-78\tМаъруфжонов Рахимжон\t+998(77)275-11-00\tАтамирзаeva Сохиба\t+998(99)997-88-70\tЖАМОЛИДДИНОВ ЗУХРИДДИН ШАРОБИДДИН ЎҒЛИ\t+998(50)501-22-44\tНажmидинов Фахриддин\t+998(99)973-37-37\tкатта лейтенант Қурбоналiev Ғайратжон Ғоффоржоновich\t99894-040-88-01
-16\tОзод\tЖалилова Мавлудахон Хакимовна\t+998(50)054-72-66\tИнамов Марифжон Орифович\t+998(94)681-80-35\tЭгамов Миржалол\t+998(93)153-73-73\tЮлдашеva Гулнора\t+998(99)914-47-48\tВАЛИЕВА ШОИРА ЗОКИРЖОНОВНА\t+998(93)227-25-78\tЖалолхонов Зиёвиддин\t+998(93)914-18-81\tлейтенант Эргашмирзаев Бахтиёр Қобилjон o‘g‘li\t99888-101-79-76
-17\tЯнгиобод\tЮсупова Нафиса Хошимжоновна\t+998(93)686-08-25\tАхунов Икрамжан Рустамович\t+998(77)211-70-17\tНасриддинов Жололиддин\t+998(99)611-21-96\tАтамирзаeva Сохиба\t+998(99)997-88-70\tКEНЖАЕВА ЗУБАЙДА АНВАРБEК ҚИЗИ\t+998(93)227-25-78\tЖалолхонов Зиёвиддин\t+998(93)914-18-81\tкапитан Кўшаков Салимжон Хошимjоновich\t99899-323-44-66
-18\tНорин\tХайитов Азамжон Акбаралиевич\t+998(97)257-68-01\tХайитов Дилмурод Рустамжанович\t+998(93)697-90-99\tЮлдашеva Наргиза\t+998(95)776-17-11\tЖўраeva Дилдора\t+998(94)507-20-84\tКАХАРОВА МУКАРРАМХОН АБДУҚОДИРОВНА\t+998(93)177-88-44\tОдилов Муслим\t+998(94)505-09-09\tмайор Деҳқанов Сарвар Холдоровich\t99893-495-25-11
-19\tНавбахор\tНабиева Гузалой Абдулахтовна\t+998(93)497-21-37\tЙўлдашев Абдухалим Абдулбоқиевич\t+998(88)230-84-87\tАнваржонов Дониёрбек\t+998(94)506-59-91\tАбдуллаeva Ёдгора\t+998(94)721-88-10\tЭРГАШEВА ГУЛРУХ АБДУМУТАЛОВНА\t+998(50)006-42-02\tНабиев Мумин\t+998(93)499-00-14\tкатта лейтенант Сайдалиев Шарифжон Маърифjон o‘g‘li\t99893-496-37-96
-20\tИстиқлол\tТўйчиев Аброр Абдуллажанович\t+998(94)204-85-44\tИбрагимов Рахматилло Шухрат ўғли\t+998(33)773-00-03\tАбдурахманов Иброхим\t+998(93)050-73-72\tЖўраeva Дилдора\t+998(94)507-20-84\tНУРДИНОВА МАЪМУРА НОЗИМЖОНОВНА\t+998(94)509-25-22\tОдилов Муслим\t+998(94)505-09-09\tкатта лейтенант Собиржонов Давронбек Хусниддин o‘g‘li\t99894-270-22-94
-21\tЁписхон\tҚорабоев Хайрулло Хайдаралиевич\t+998(94)508-19-79\tМамадалиев Бахром Турсуналievich\t+998(88)177-03-03\tОртиқов Жавохир\t+998(50)054-20-40\tАкбарова Сайёра\t+998(93)587-87-80\tХАКИМОВА ДИЛДОРА БАХТИЁРОВНА\t+998(95)857-02-47\tАбдирахимов Отабек\t+998(88)255-55-88\tлейтенант Юсупов Авазбек Машрабjон o‘g‘li\t99894-162-55-55
-22\tКатта Чек\tРахматуллаева Равшаной Жўраевна\t+998(94)175-69-27\tЭргашев Жалолиддин Эргашбой ўғли\t+998(94)174-30-53\tКомилов Дониёр\t+998(93)260-66-99\tНажимова Мухаррам\t+998(93)887-83-18\tХАКИМОВА ДИЛДОРА БАХТИЁРОВНА\t+998(95)857-02-47\tАбдирахimov Otabek\t+998(88)255-55-88\tкапитан Абдурахманов Сардор Арибжановich\t99893-541-45-86
-23\tҚозоқовул\tРустамова Нилуфар Абдужabbarovna\t+998(94)274-37-87\tАбдуллаев Элмурод Иброхим ўғли\t+998(93)049-00-80\tУбайдуллаев Улуғбек\t+998(95)868-61-62\tХожимуродова Хидоят\t+998(94)506-48-93\tТОЖИБОЕВА ХУРШИДА РАВШОНБEКОВНА\t+998(93)914-21-83\tАбдирахimov Otabek\t+998(88)255-55-88\tкатта лейтенант Орифжонов Аброржон Орифjон o‘g‘li\t99894-217-22-02
-24\tБахт\tМусурмонқулов Толибжон\t+998(94)534-45-45\t\tвакант\t+998(00)000-00-00\tАзизова Дилдора\t+998(95)033-66-06\tУМИРЗАКОВА ДИЛБАРХОН АБДИВОХИДОВНА\t+998(94)272-52-81\tАхмадалиев Абдумалик\t+998(94)508-00-90\tкатта лейтенант Абдурашидов Тўлқинжон Бахтиёр o‘g‘li\t99894-504-88-00
-25\tХалфатўпи\tХакимова Машхура Олимовна\t+998(93)567-01-12\tМирзарахимов Бобурмирзо Шокиржон ўғли\t+998(94)153-98-97\tЭшонқулов Муслимжон\t+998(93)942-59-92\tМаматханova Мухarрам\t+998(93)417-94-40\tЭРКИНБОЕВА ХУСНИДА АБДУРАХИМ ҚИЗИ\t+998(93)484-18-65\tАхмадалiev Абдумалик\t+998(94)508-00-90\tлейтенант Жўраев Азизbek Авазбекович\t99850-222-21-55
-26\tЯшиқ\tШокиров Одилжон Абдухалилович\t+998(93)498-85-02\tХидиров Жамшидбек Адашалиевич\t+998(94)067-77-79\tМадrahimova Mастура\t+998(77)119-10-90\tТурақулова Мухаббат\t+998(99)007-69-57\tУМУРЗАКОВА ШАХНОЗА МАМАЖАНОВНА\t+998(93)207-37-81\tНабиев Мумин\t+998(93)499-00-14\tкатта лейтенант Рахимжанов Рустамjон Махмуд o‘g‘li\t99893-673-11-77
-27\tЭшонтўпи\tБобохонов Баходир Абдужabborovich\t+998(94)631-82-00\tХудойбердиев Муроджон Йўлдошали ўғли\t+998(94)508-45-45\tАлиев Азизбек\t+998(95)646-35-50\tМаматханova Мухarрам\t+998(93)417-94-40\tНОЗИМЖОНОВ АСАДБЕК МАХМУДЖОН ЎҒЛИ\t+998(93)678-88-58\tИсоқжонов Темур\t+998(33)726-70-70\tкатта лейтенант Нишанов Адхамjон Абдурахim o‘g‘li\t99894-150-74-94
-28\tАтлас\tБокижанова Барчиной Хусанбоевна\t+998(93)718-24-95\tСайдуллаев Лутфилла Абдуллаевич\t+998(94)171-02-39\tЭгамбердиев Мирахмад\t+998(94)754-21-21\tХожимуродова Хидоят\t+998(94)506-48-93\tМУЛЛАБОЕВ МУЗАФФАР РУСТАМОВИЧ\t+998(93)488-84-20\tИсоқжонов Темур\t+998(33)726-70-70\tлейтенант Қодиров Дилшоджон Шермухаммадович\t99893-261-77-00
-29\tЭлатан\tАбдулқосимов Улуғбек Абдиллажановich\t+998(94)213-00-88\tХабибуллаев Нодиржон Абдуллажон ўғли\t+998(94)380-75-72\tИсроилов Дилшодbek\t+998(99)171-60-00\tТурақулова Мухаббат\t+998(99)007-69-57\tТУРДАЛИЕВ ОТАБEК БОТИРЖОН ЎҒЛИ\t+998(94)090-45-45\tИсоқжонов Темур\t+998(33)726-70-70\tкапитан Давронов Қобилjон Зокиржонович\t99894-151-22-00
-30\tКўчабоши\tЖўраев Тохир Акрамовich\t+998(95)229-06-58\tВахобов Собитхон Анвар ўғли\t+998(94)509-99-33\tАбдурасулов Исломbek\t+998(88)257-01-93\tАкбарова Сайёра\t+998(93)587-87-80\tРАХИМОВ АБРОРЖОН ИСРОИЛ ЎҒЛИ\t+998(93)705-31-13\tИсоқжонов Темур\t+998(33)726-70-70\tкатта лейтенант Эгамбердиев Сардорbek Сохибjон o‘g‘li\t99899-652-65-58
-31\tЯнгиер\tТўрабоев Юнусali Турсунбаевich\t+998(99)537-40-56\tУсмонов Элдор Абраровich\t+998(99)395-16-23\tОтаханов Мухаммадшариф\t+998(99)608-39-69\tИнаятова Мухайё\t+998(99)641-78-42\tРАСУЛОВА ИНОЯТХОН ТУРГУНПУЛАТОВНА\t+998(93)938-28-81\tАбдулхаев Фаррух\t+998(88)212-75-12\tЭргашев Акбар Одилжоновich\t99894-274-08-55
-32\tГулистон\tАхунов Абдухалил Маматазимовich\t+998(93)493-00-67\tДадамирзаев Умар Баходировich\t+998(77)023-00-07\tАбдумажидов Дониёр\t+998(99)320-29-39\tАтамирзаeva Феруза\t+998(77)311-18-02\tУЛУХОНОВА ФАРИДАХОН САЙФИДДИН ҚИЗИ\t+998(93)462-86-03\tАбдурахимов Шавкат\t+998(94)176-90-50\tлейтенант Абдуғаффоров Асилбек Мирзохid o‘g‘li\t99893-346-59-35
-33\tБўстон\tНematullayev Ахmadali Luhmonovich\t+998(99)521-63-31\tАбдулхакимов Бекзод Бахтиёр ўғли\t+998(77)708-75-77\tЭргашев Абдулатиф\t+998(94)178-30-08\tАтамирзаeva Феруза\t+998(77)311-18-02\tБОБОМИРЗАЕВА ДИЛОРОМ НАБИЖАНОВНА\t+998(50)581-38-20\tАбдулхаев Фаррух\t+998(88)212-75-12\tлейтенант Қўчқаров Акмалjон Бурхоновich\t99899-001-00-31
-34\tЁғду\tАбдураззақов Хасанбой Турсуновиch\t+998(95)008-03-75\tКамолов Хусниддин Бахтиёр ўғли\t+998(77)077-78-82\tЖўраев Улуғбек\t+998(93)947-17-05\tХаликова Озода\t+998(88)040-04-03\tАЛИМАТОВА АЗИЗАХОН ШEРБАЕВНА\t+998(99)695-42-74\tНажмидинов Фахриддин\t+998(99)973-37-37\tкичик сержант Хамрақулов Бахтиёр Сирожиддиновich\t99894-275-00-86
-35\tДехқонобод\tУсмонов Абдулазиз Жўраевич\t+998(90)279-22-12\tХамидов Жахонгир Тожиддиновich\t+998(99)633-82-31\tМирзабдуллаева Саидахон\t+998(93)810-99-19\tОтажанова Гулинора\t+998(99)996-27-25\tТОЖИДИНОВА АЗИЗА БАХОДИРОВНА\t+998(99)995-05-13\tАбдурахимов Шавkat\t+998(94)176-90-50\tмайор Холмирзаев Отаbek Луқмонжоновich\t99893-948-53-27
-36\tМехнатобод\tНизамова Робияхон Юлдашхановна\t+998(99)315-71-73\tАхмедов Абдувосит Абдухалил ўғли\t+998(94)507-30-50\tКурбанов Муроджон\t+998(94)303-33-63\tИнамова Зилола\t+998(33)258-85-55\tХАКИМЖОНОВ ОМАДБEК ШУНҚОР ЎҒЛИ\t+998(93)266-11-77\tРустамов Одилжон\t+998(93)154-69-59\tкатта лейтенант Иномов Иброхимжон Холмamat o‘g‘li\t99893-949-89-19
-37\tУчкўприк\tИсроилов Акramjon Хamидовich\t+998(94)331-19-79\tУмаров Сайфулло Сайдуллаевич\t+998(93)880-44-77\tБаҳриддинов Сирожidдин\t+998(94)074-90-70\tЖумабаева Гулчехра\t+998(99)609-85-52\tМАМАДАЛИЕВА ДИЛРАБО НEЪМАТЖОНОВНА\t+998(99)002-65-25\tАбдурахимов Шавkat\t+998(94)176-90-50\tподполковник вакант\t
-38\tПахтачи\tТошбоев Зафарбек Эркиновис\t+998(99)141-54-56\tХасанов Сардорбек Равшан ўғли\t+998(77)006-80-00\tОрипов Саидабдулло\t+998(99)182-40-80\tЖумабаева Гулчехра\t+998(99)609-85-52\tМАМАТОВА ДИЛАРОМ ЮСУФЖАНОВНА\t+998(93)154-08-16\tСарибаев Ихволжон\t+998(94)158-77-27\tлейтенант Собиржонов Асатbek Комилjон o‘g‘li\t99899-324-78-83
-39\tҚўрғонча\tРахмонов Фарход Мухторжоновich\t+998(50)500-02-70\tАрипов Хусниддин Хусанбаевich\t+998(99)440-71-11\tДжалилов Равшан\t+998(50)708-87-98\tТожибаева Феруза\t+998(94)927-11-89\tНУРМУХАММEДОВ ШАЙДУЛЛОБEК НАЗИРЖОН ЎҒЛИ\t+998(94)159-41-44\tТурғунов Худойшукур\t+998(94)081-50-00\tмайор Солиев Жамолиддин Махмуджановich\t99893-340-68-11
-40\tМаданият\tРўзиматова Муқаддасхон Хusanбаевna\t+998(94)077-10-60\tНабиев Ислом Искандар ўғли\t+998(94)150-97-17\tНишонов Саиджон\t+998(95)063-04-94\tАбдурахманова Манзура\t+998(94)902-20-90\tВАЛИЕВА МУНОЖААТ КУЧКОРОВНА\t+998(94)902-40-99\tНажmидинов Фахриддин\t+998(99)973-37-37\tкапитан Каримов Акramjon Комилjоновich\t99894-302-16-01
-41\tКўприкбоши\tАбдуллаев Бахтиёр Абдуgaffarovich\t+998(94)509-44-77\tОтамирзаев Шерзод Бахтиёр ўғли\t+998(94)509-99-80\tАбдумаликов Мухамmadдин\t+998(94)174-54-34\tХасанова Гулчехра\t+998(94)306-51-16\tАКБАРОВА ЗУХРА СОБИРЖАНОВНА\t+998(50)003-88-53\tВалиев Ахrор\t+998(95)062-70-50\tкатта лейтенант Бурханов Мансурjон Хасанбоевич\t99893-496-49-96
-42\tҚумтўғон\tИсақова Дилдора\t+998-99-406-89-87\tСаматов Иқбол Қосимjоновich\t+998(93)911-00-97\tЖўраев Дилшодbek\t+998(94)596-71-17\tХасанова Гулчехра\t+998(94)306-51-16\tЁКУБОВА НАСИМБОНУ УМАРЖОН КИЗИ\t+998(95)857-05-83\tТурғунов Худойшукур\t+998(94)081-50-00\tмайор Ёқубов Самандар Икромjон o‘g‘li\t99888-440-04-06
-43\tСоҳил\tАбдувалиеva Гулхумор Ураимовна\t+998(93)492-05-32\tХолматов Шухрат Шавkatjон o‘g‘li\t+998(99)607-06-05\tБахтиёrov Ikromjон\t+998(94)508-14-36\tХабибаeva Rahima\t+998(99)924-29-66\tБАДАЛОВА НАСИБАХОН СИДИҚЖОН ҚИЗИ\t+998(95)624-44-48\tМарипов Rahimjон\t+998(99)320-88-99\tмайор Убайдуллаев Шерали Нурмухamматовich\t99893-710-78-73
-44\tЎрдабоғ\tТўраев Атхамжон\t+99891-180-82-46\tМусаев Темурмалик Қутбиддиновich\t+998(94)098-32-33\tШарифjонов Mухриддин\t+998(93)306-01-11\tАбдугаппарова Mухarрам\t+998(94)907-14-29\tҒУЛОМОВ САРДОРБEК ИКРОМЖОН ЎҒЛИ\t+998(88)828-05-50\tДадабоев Жамолиддин\t+998(97)254-60-70\tБуронов Фаррух Зокирjоновich\t99893-401-66-58
-45\tТуркистон\tЯкубова Саодат Абитдиновna\t+998(93)093-99-95\tХоджимирzaев Яхё Сирожitдиновich\t+998(93)247-02-02\tТўраев Аброр\t+998(99)316-59-21\tИнамова Зилола\t+998(33)258-85-55\tАСАТУЛЛАЕВА УМИДА РАХИМЖАНОВНА\t+998(99)336-75-75\tРустамов Odiljон\t+998(93)154-69-59\tкатта лейтенант Исматуллаev Аброрbek Odiljон o‘g‘li\t99893-776-32-16
-46\tЁрқин ҳаёт\tХасанов Маруфjон Obidjон o‘g‘li\t+998(93)495-80-58\tРузибаev Elmurod Baxromjоновich\t+998(93)498-69-79\tИсроилов Акрамjон\t+998(93)945-13-14\tБобоеva Шахноза\t+998(94)277-67-83\tНАЖМИДДИНОВА УМИДАХОН МУХАММАДЖАНОВНА\t+998(93)284-00-59\tАхмадалiev Абдумалик\t+998(94)508-00-90\tкатta лейтенант Уринов Шерзод Davlatali o‘g‘li\t99888-231-71-71
-47\tСаноат\tИргashев Аброр Алижоновich\t+998(91)177-11-69\tҚосимов Ахmadjон Шokирjон o‘g‘li\t+998(94)843-57-67\tУсмонjонова Madina\t+998(93)768-01-11\tСобирова Мухайё\t+998(93)364-15-45\tМУЙДИНОВА ДИЛФУЗА ЖУРАЕВНА\t+998(93)402-55-61\tСарibaev Ichvoljон\t+998(94)158-77-27\tкатта лейтенант Умматалiev Nodirjон Баходир o‘g‘li\t99894-177-27-97
-48\tФарғона\tТошkentбоеva Гулноза Холмирzaевна\t+998(93)610-11-31\tЖўраев Сухроб Абдумажid o‘g‘li\t+998(93)277-07-77\tХошimов Акбарjон\t+998(99)978-80-33\tвакант\t+998(00)000-00-00\tРУСТАМОВА ФEРУЗА ҚАЙИМЖОН ҚИЗИ\t+998(95)173-70-30\tИсoqov Xayrullo\t+998(94)895-50-00\tкапитан Мамадaliev Қахрамон Nemатовich\t99897-620-13-43
-49\tШодлик\tСаттибаev Utкирbek Абдуллахатовich\t+998(94)747-07-42\tТурдиев Рахматулло Баходир o‘g‘li\t+998(95)013-92-92\tЖўраев Абдурасул\t+998(97)427-04-03\tДжўраeva Азиза\t+998(94)664-08-31\tСАЛИЖОНОВА КАРОМАТХОН БОХОДИР ҚИЗИ\t+998(93)962-88-11\tОдилов Musлим\t+998(94)505-09-09\tкатта лейтенант Ахмедов Musojон Murодjон o‘g‘li\t99893-946-61-11
-50\tФайзиобод\tУсманова Гулмира Абдулахатовna\t+998(94)408-42-65\tСултонов Дилшод Абдухалilovich\t+998(99)462-24-66\tАсridдинов Рахматилло\t+998(93)424-22-25\tДжўраeva Азиза\t+998(94)664-08-31\tТУРДИЕВА НАЗОКАТ БОТИРЖОН ҚИЗИ\t+998(94)508-75-57\tИсoqov Xayrullo\t+998(94)895-50-00\tкатта лейтенант Олимjонов Murодилла Muzaffar o‘g‘li\t99893-353-32-32
-51\tОқтовлиқ\tТурғунов Бахтиёр Ғуломович\t+998(93)705-01-83\tХасанов Саддам Tolibovich\t+998(77)254-00-05\tТўхтамирзев Улуғbek\t+998(93)494-44-27\tТурсунова Шаходат\t+998(94)590-79-78\tМАХКАМОВА ДИЛНОЗ ХУСАНБАЕВНА\t+998(94)590-79-78\tИсoqov Xayrullo\t+998(94)895-50-00\tлейтенант Қодиров Илхомжон Иброхим o‘g‘li\t99890-222-09-07
-52\tНавоий\tХўжакелдiev Ikromjон Аhadжоновich\t+998(94)213-48-83\tКамолов Исмоилхўжа Баходирхўжа o‘g‘li\t+998(94)151-86-69\tИсматуллаев Fazлиддин\t+998(90)200-04-23\tАбдурахmanova Nодира\t+998(93)045-05-65\tНУРАЛИЕВ АСРОРБEК ХОЛМАМАТ ЎҒЛИ\t+998(93)363-88-55\tРустамов Odiljон\t+998(93)154-69-59\tподполковник Муродов Абдурахмон Tolibjоновich\t99899-393-22-92
-53\tФаровон\tБозорова Жамила Гафуровna\t+998(94)176-18-64\tСупижонов Нуманжон Nemатовich\t+998(94)171-10-71\tДавlatов Ўтkirbek\t+998(91)360-94-59\tТожibaeva Хamiда\t+998(93)173-69-24\tКОМИЛОВА ФEРУЗА АБДУМУМИН ҚИЗИ\t+998(50)715-64-60\tМарипов Rahimjон\t+998(99)320-88-99\tкатta лейтенант Абдуvaliev Jasurbek Komiljон o‘g‘li\t99894-553-16-00
-54\tШолдирама\tАдашеva Гулноз Зиёbiddinovna\t+998(93)696-01-26\tИсмоилжонов Абдулбоки Исмоилжон o‘g‘li\t+998(93)584-85-58\tХомidов Абдулбосит\t+998(93)173-01-95\tТурсунова Шаходат\t+998(94)590-79-78\tТАЖИБАЕВА УКТАМХОН АБДУҒАПИРОВНА\t+998(95)360-77-66\tНабиев Mumin\t+998(93)499-00-14\tмайор Хайdarov Muzaffar Rahmonalievich\t99894-175-43-33
-55\tМустақиллик\tҚурбонов Илхом Исакжановich\t+998(97)150-66-68\tОдилжанов Улуғbek Dилшод o‘g‘li\t+998(93)006-01-05\tТоштемиров Элмурод\t+998(93)261-40-11\tТожibaeva Мухтарамxon\t+998(93)407-51-63\tҚОБИЛОВА ДИЛДОРА ҚОДИРАЛИЕВНА\t+998(93)925-97-27\tБобоев Жохонгир\t+998(97)257-07-09\tкатta лейтенант Мамасолиев Бобур Алишер o‘g‘li\t99893-494-72-77
-56\tТегирмон\tИсмолова Наргиза Исакжановna\t+998(93)677-43-79\tАраббоев Абдуғаффор Нурилло o‘g‘li\t+998(94)636-99-00\tТожимирzaeva Sevara\t+998(94)277-11-07\tИнамова Zulfiya\t+998(93)440-15-40\tУМАРОВА НАРГИЗА КАРИМОВНА\t+998(94)270-55-38\tВалиев Ахror\t+998(95)062-70-50\tкапитан Исламов Шерзод Zulfiqarovich\t99897-620-52-02
-57\tКаттамўғол\tҚосимов Улуғbek Ergashalievich\t+998(93)819-57-70\tҚамбаров Sanjarbek Asqarovich\t+998(93)495-81-19\tУсубжанова Mahfuza\t+998(95)236-50-50\tДехканова Наргиза\t+998(94)170-15-01\tЭРГАШEВ ХУСНИДДИН НEМАТОВИЧ\t+998(94)631-31-81\tЙигиталiev Акmaljон\t+998(97)259-77-67\tлейтенант Деҳқанов Хусниддин Ибодуллаевич\t99893-325-50-02
-58\tТинчлик\tИсраилов Комилжон Sobirjоновich\t+998(93)943-71-68\tБолтабоев Акramjон Ikromjоновich\t+998(93)150-84-44\tМахмудов Shарифjон\t+998(93)446-77-17\tАлимова Maloxatxon\t+998(94)176-69-00\tХАЖИМИРЗАЕВ УТКИР ТУРСУНПУЛАТОВИЧ\t+998(94)355-00-88\tБобоев Жохонгир\t+998(97)257-07-09\tкатta лейтенант Азimов Ibrohimjон Nozim o‘g‘li\t99894-310-58-58
-59\tИстиқбол\tУбаева Ойсулув Ахmadovna\t+998(94)175-69-10\tЭсанов Nodirbek Tohir o‘g‘li\t+998(94)629-41-55\tСамандаров Abbos\t+998(97)226-62-22\tАлимова Maloxatxon\t+998(94)176-69-00\tҚАЮМОВ МАКСАДБEК МАРИПЖОН ЎҒЛИ\t+998(94)157-14-44\tЙигиталiev Акmaljон\t+998(97)259-77-67\tкапитан Абдуқаххаров Адham Абдуқahhor o‘g‘li\t99894-278-86-89
-60\tЯнги хаёт\tГаниев Алимардон Ergashbaevich\t+998(95)100-53-80\tРахимов Azizbek A’zamjоновich\t+998(93)210-83-88\tЁқубжанов Sherzod\t+998(88)900-99-32\tИнамова Zulfiya\t+998(93)440-15-40\tЁҚУБЖОНОВА ЗИЛОЛАБОНУ ШУКУРЖОН ҚИЗИ\t+998(88)073-17-03\tДадабоев Jamoliddin\t+998(97)254-60-70\tлейтенант Обиджонов Qobiljон Hasanboy o‘g‘li\t99897-258-78-38
-61\tҚурама\tСаримсоқова Насиба Исмонжановна\t+998(94)279-46-08\tАзизов Шерзод Шарофиддин ўғли\t+998(94)300-00-06\tАбдухакимов Хусниддин\t+998(97)373-22-33\tДехканова Наргиза\t+998(94)170-15-01\tКОРАБОЕВА МУАТТАРХОН МАМАСИДИҚОВНА\t+998(93)816-02-85\tДадабоев Jamoliddin\t+998(97)254-60-70\tлейтенант Туланбоев Мирзабек Баходир o‘g‘li\t99895-828-10-99
+def _safe_edit(chat_id, msg_id, text, kb=None):
+    try:
+        bot.edit_message_text(text, chat_id, msg_id,
+                              reply_markup=kb, parse_mode="Markdown")
+    except Exception as e:
+        if "message is not modified" not in str(e).lower():
+            print(f"edit_message_text error: {e}")
+
+# ============================================================
+# 9. MAHALLA (61 ta MFY)
+# ============================================================
+ROLE_META = [
+    ("rais",              "Rais",               "👤"),
+    ("hokim_yordamchisi", "Hokim yordamchisi",  "🧑‍💼"),
+    ("yoshlar",           "Yoshlar yetakchisi", "🧑‍🎓"),
+    ("xotin_qizlar",      "Xotin-qizlar faoli", "👩‍🦰"),
+    ("ijtimoiy",          "Ijtimoiy xodim",     "🤝"),
+    ("dsi",               "DSI xodimi",         "💰"),
+    ("profilaktika",      "Profilaktika inspektori", "🛡️"),
+]
+
+MAHALLA_TSV = """\
+Tr\tMFY\tRais\tTel\tHokimYordamchi\tTel\tYoshlar\tTel\tXotinQizlar\tTel\tIjtimoiy\tTel\tDSI\tTel\tProfilaktika\tTel
+1\tЧек\tИсманжанов Бекмурод Марипжанович\t+998(93)064-26-38\tЯкубов Азиз Махмудович\t+998(99)510-11-45\tЭсанбоев Абдулвохид\t+998(50)177-62-11\tНишонова Нигора\t+998(93)264-19-79\tМирзаева Насиба Адилжановна\t+998(93)769-72-72\tАбдулхаев Фаррух\t+998(88)212-75-12\tкатта лейтенант Каримов Бобурмирзо Абдуғаффор ўғли\t+998(93)671-69-69
+2\tУлуғбек\tНизамова Зулфия Юлдашхановна\t+998(94)307-00-90\tИброхимов Шохрух Бахромжон ўғли\t+998(99)796-23-22\tСаидов Бахтиёр\t+998(50)177-58-11\tБоқиева Назирахон Абдумутловна\t+998(94)159-32-09\tНОРМИРЗАЕВ МУРОДЖОН ОЛИМЖОНОВИЧ\t+998(50)307-92-92\tМарипов Рахимжон\t+998(99)320-88-99\tкапитан Солиев Равшанбек Одилович\t+998(95)273-59-41
+3\tЁшлик\tУбайдуллаев Акмал Хамидуллаевич\t+998(93)165-03-33\tТошпулатов Комилжон Рустамович\t+998(94)863-62-62\tОбидов Эркин\t+998(50)177-38-11\tвакант\t\tТУРДИМАТОВА ДИЛНОЗ МАХАММАДЖАНОВНА\t+998(94)301-61-30\tАбдурахимов Шавкат\t+998(94)176-90-50\tкапитан Якубов Турсунбой Махамаджонович\t+998(93)151-53-53
+4\tҚўғай\tДехконов Элдор Зокиржонович\t+998(88)468-88-44\tУсманов Нодирбек Равшанбекович\t+998(93)913-81-82\tАбдуллажонов Жасур\t+998(50)177-45-11\tУразова Гавхарой\t+998(93)605-13-13\tУМАРОВА ФЕРУЗА ХАМИДОВНА\t+998(95)072-77-91\tКамалов Уктам\t+998(94)508-96-49\tподполковник Махкамов Махмуджон Абдуқодирович\t+998(93)676-81-52
+5\tИсломобод\tДехканов Толибжон Одилович\t+998(99)979-15-02\tДавлатов Шавкат Шухрат ўғли\t+998(93)949-13-81\tАбдуқаххаров Хусниддин\t+998(50)177-43-11\tХудайбердиева Ханифа\t+998(99)435-42-61\tТУРСУНОВА МАШХУРА АБДУРАХИМЖАНОВНА\t+998(99)270-92-77\tСарибаев Ихволжон\t+998(94)158-77-27\tмайор Бўтаев Авазбек Абдумуталифович\t+998(94)302-20-27
+6\tУчёғоч\tДжўраев Шокиржон Абдуқодирович\t+998(93)211-01-36\tКамолов Нодир Қодиржонович\t+998(94)305-99-99\tҚурбонова Мафтуна\t+998(93)415-93-88\tУразова Гавхарой\t+998(93)605-13-13\tМЕХМАНОВА МАНЗУРАХОН ИСОҚЖОН ҚИЗИ\t+998(94)902-91-88\tКамалов Уктам\t+998(94)508-96-49\tкатта лейтенант Абдуллажонов Ғайбулло Рахматулло ўғли\t+998(97)256-92-92
+7\tНаврўз\tАбдуллаев Саходила Махмудович\t+998(93)067-12-06\tКаримов Саидкамол Акмал ўғли\t+998(90)776-44-94\tОлимжанов Абдулазиз\t+998(93)056-36-63\tШокирова Мухаббат\t+998(99)696-62-64\tТУРДАЛИЕВ АСРОРБЕК АБДУВАЛИ ЎҒЛИ\t+998(94)153-66-77\tТурғунов Худойшукур\t+998(94)081-50-00\tкапитан Рахимов Дониёр Ёқубжонович\t+998(94)302-07-17
+8\tНуробод\tТашбаев Авазбек Ботиралиевич\t+998(94)307-77-89\tАбдухалилов Асадилло Хусниддин ўғли\t+998(99)323-68-70\tТурдалиев Акмал\t+998(94)506-44-88\tШокирова Мухаббат\t+998(99)696-62-64\tЭРГАШЕВА ГУЛНОЗА АБДУМАЖИДОВНА\t+998(94)990-52-50\tКамалов Уктам\t+998(94)508-96-49\tкатта лейтенант Турғунов Араббой Муротали ўғли\t+998(97)212-85-94
+9\tНамуна\tБозоров Бахром Камилжанович\t+998(94)507-57-50\tХайдаров Мирзарахмат Илхомжон ўғли\t+998(94)941-00-00\tҚодиржонов Жахонгир\t+998(33)049-59-59\tЮлдашева Гулнора\t+998(99)914-47-48\tАБДУРАХМОНОВА МУХАРРАМХОН ҒУЛАМОВНА\t+998(97)570-74-02\tЖалолхонов Зиёвиддин\t+998(93)914-18-81\tкатта лейтенант Қодиров Абдулазиз Абдулатиф ўғли\t+998(97)594-45-75
+10\tБирлик\tБозорова Мафтуна Фозилжон қизи\t+998(33)185-02-02\tХабибуллаев Сардорбек Дилшод ўғли\t+998(50)004-59-94\tЙўлдашев Иқболжон\t+998(50)001-40-20\tТожибаева Феруза\t+998(94)927-11-89\tСАИДМАМАТОВА ДИЛБАРХОН АБСАЛОМОВНА\t+998(93)298-23-83\tСарибаев Ихволжон\t+998(94)158-77-27\tкатта лейтенант Сидиқов Жахонгир Юлдашбой ўғли\t+998(93)187-39-93
+11\tШахрихончек\tАлимов Жасур Райимжонович\t+998(93)673-93-25\tХайдаров Улуғбек Илхомжон ўғли\t+998(95)028-66-66\tҚамбаралиев Азизбек\t+998(93)373-06-07\tМаматхаджаева Нодира\t+998(94)271-59-71\tКАМАЛОВА ДИЛНОЗА ЛУТФИДДИНОВНА\t+998(94)792-20-84\tАхмедов Файзуллахўжа\t+998(97)654-95-28\tлейтенант Азларханов Ойбек Одилжон ўғли\t+998(93)244-03-33
+12\tҚўғай ўлмас\tКурбонова Мархабо Исмоиловна\t+998(93)493-68-29\tМаврулов Исроилжон Нематжонович\t+998(93)264-80-07\tЎсарбоев Алимардон\t+998(88)688-85-98\tМаматхаджаева Нодира\t+998(94)271-59-71\tАБДУЛЛАЕВА ШОХЗОДА АБДУРАХИМОВНА\t+998(94)908-98-76\tАхмедов Файзуллахўжа\t+998(97)654-95-28\tкапитан Пулатов Элмурод Бахриддин ўғли\t+998(93)943-11-94
+13\tЁрқинбойчек\tКодирова Одина Мирхамитовна\t+998(94)509-73-74\tДжалилов Қахрамон Рустамжанович\t+998(97)231-88-82\tХолмухаммедов Сарварбек\t+998(93)825-31-25\tСиддиқова Айшахон\t+998(93)409-96-65\tВакант\t\tАхмедов Файзуллахўжа\t+998(97)654-95-28\tкатта лейтенант Нарзуллаев Шавкатжон Файзулло ўғли\t+998(94)303-40-10
+14\tБахриобод\tМирзаахмедов Қудратжон Акбаралиевич\t+998(94)170-86-48\tИсомиддинов Абдумажид Абдухалилович\t+998(97)372-74-22\tАхмаджонов Яхё\t+998(93)482-42-22\tСиддиқова Айшахон\t+998(93)409-96-65\tСАФАРАЛИЕВА ФЕЪРУЗА ХУСАНБОЙ ҚИЗИ\t+998(94)429-92-25\tАхмедов Файзуллахўжа\t+998(97)654-95-28\tкатта лейтенант Фозилов Жасурбек Нозимжон ўғли\t+998(94)154-99-48
+15\tОбод\tМамасолиев Жахонгир Алижонович\t+998(99)089-02-33\tҚурбонов Бобур Мухитдинович\t+998(93)611-00-78\tМаъруфжонов Рахимжон\t+998(77)275-11-00\tАтамирзаева Сохиба\t+998(99)997-88-70\tЖАМОЛИДДИНОВ ЗУХРИДДИН ШАРОБИДДИН ЎҒЛИ\t+998(50)501-22-44\tНажмидинов Фахриддин\t+998(99)973-37-37\tкатта лейтенант Қурбоналиев Ғайратжон Ғоффоржонович\t+998(94)040-88-01
+16\tОзод\tЖалилова Мавлудахон Хакимовна\t+998(50)054-72-66\tИнамов Марифжон Орифович\t+998(94)681-80-35\tЭгамов Миржалол\t+998(93)153-73-73\tЮлдашева Гулнора\t+998(99)914-47-48\tВАЛИЕВА ШОИРА ЗОКИРЖОНОВНА\t+998(93)227-25-78\tЖалолхонов Зиёвиддин\t+998(93)914-18-81\tлейтенант Эргашмирзаев Бахтиёр Қобилжон ўғли\t+998(88)101-79-76
+17\tЯнгиобод\tЮсупова Нафиса Хошимжоновна\t+998(93)686-08-25\tАхунов Икрамжан Рустамович\t+998(77)211-70-17\tНасриддинов Жололиддин\t+998(99)611-21-96\tАтамирзаева Сохиба\t+998(99)997-88-70\tКЕНЖАЕВА ЗУБАЙДА АНВАРБЕК ҚИЗИ\t+998(93)227-25-78\tЖалолхонов Зиёвиддин\t+998(93)914-18-81\tкапитан Кўшаков Салимжон Хошимжонович\t+998(99)323-44-66
+18\tНорин\tХайитов Азамжон Акбаралиевич\t+998(97)257-68-01\tХайитов Дилмурод Рустамжанович\t+998(93)697-90-99\tЮлдашева Наргиза\t+998(95)776-17-11\tЖўраева Дилдора\t+998(94)507-20-84\tКАХАРОВА МУКАРРАМХОН АБДУҚОДИРОВНА\t+998(93)177-88-44\tОдилов Муслим\t+998(94)505-09-09\tмайор Деҳқанов Сарвар Холдорович\t+998(93)495-25-11
+19\tНавбахор\tНабиева Гузалой Абдулахтовна\t+998(93)497-21-37\tЙўлдашев Абдухалим Абдулбоқиевич\t+998(88)230-84-87\tАнваржонов Дониёрбек\t+998(94)506-59-91\tАбдуллаева Ёдгора\t+998(94)721-88-10\tЭРГАШЕВА ГУЛРУХ АБДУМУТАЛОВНА\t+998(50)006-42-02\tНабиев Мумин\t+998(93)499-00-14\tкатта лейтенант Сайдалиев Шарифжон Маърифжон ўғли\t+998(93)496-37-96
+20\tИстиқлол\tТўйчиев Аброр Абдуллажанович\t+998(94)204-85-44\tИбрагимов Рахматилло Шухрат ўғли\t+998(33)773-00-03\tАбдурахманов Иброхим\t+998(93)050-73-72\tЖўраева Дилдора\t+998(94)507-20-84\tНУРДИНОВА МАЪМУРА НОЗИМЖОНОВНА\t+998(94)509-25-22\tОдилов Муслим\t+998(94)505-09-09\tкатта лейтенант Собиржонов Давронбек Хусниддин ўғли\t+998(94)270-22-94
+21\tЁписхон\tҚорабоев Хайрулло Хайдаралиевич\t+998(94)508-19-79\tМамадалиев Бахром Турсуналиевич\t+998(88)177-03-03\tОртиқов Жавохир\t+998(50)054-20-40\tАкбарова Сайёра\t+998(93)587-87-80\tХАКИМОВА ДИЛДОРА БАХТИЁРОВНА\t+998(95)857-02-47\tАбдирахимов Отабек\t+998(88)255-55-88\tлейтенант Юсупов Авазбек Машрабжон ўғли\t+998(94)162-55-55
+22\tКатта Чек\tРахматуллаева Равшаной Жўраевна\t+998(94)175-69-27\tЭргашев Жалолиддин Эргашбой ўғли\t+998(94)174-30-53\tКомилов Дониёр\t+998(93)260-66-99\tНажимова Мухаррам\t+998(93)887-83-18\tХАКИМОВА ДИЛДОРА БАХТИЁРОВНА\t+998(95)857-02-47\tАбдирахимов Отабек\t+998(88)255-55-88\tкапитан Абдурахманов Сардор Арибжанович\t+998(93)541-45-86
+23\tҚозоқовул\tРустамова Нилуфар Абдужаббаровна\t+998(94)274-37-87\tАбдуллаев Элмурод Иброхим ўғли\t+998(93)049-00-80\tУбайдуллаев Улуғбек\t+998(95)868-61-62\tХожимуродова Хидоят\t+998(94)506-48-93\tТОЖИБОЕВА ХУРШИДА РАВШОНБЕКОВНА\t+998(93)914-21-83\tАбдирахимов Отабек\t+998(88)255-55-88\tкатта лейтенант Орифжонов Аброржон Орифжон ўғли\t+998(94)217-22-02
+24\tБахт\tМусурмонқулов Толибжон\t+998(94)534-45-45\tвакант\t\tАзизова Дилдора\t+998(95)033-66-06\tУМИРЗАКОВА ДИЛБАРХОН АБДИВОХИДОВНА\t+998(94)272-52-81\tАхмадалиев Абдумалик\t+998(94)508-00-90\tкатта лейтенант Абдурашидов Тўлқинжон Бахтиёр ўғли\t+998(94)504-88-00
+25\tХалфатўпи\tХакимова Машхура Олимовна\t+998(93)567-01-12\tМирзарахимов Бобурмирзо Шокиржон ўғли\t+998(94)153-98-97\tЭшонқулов Муслимжон\t+998(93)942-59-92\tМаматханова Мухаррам\t+998(93)417-94-40\tЭРКИНБОЕВА ХУСНИДА АБДУРАХИМ ҚИЗИ\t+998(93)484-18-65\tАхмадалиев Абдумалик\t+998(94)508-00-90\tлейтенант Жўраев Азизбек Авазбекович\t+998(50)222-21-55
+26\tЯшиқ\tШокиров Одилжон Абдухалилович\t+998(93)498-85-02\tХидиров Жамшидбек Адашалиевич\t+998(94)067-77-79\tМадрахимова Мастура\t+998(77)119-10-90\tТурақулова Мухаббат\t+998(99)007-69-57\tУМУРЗАКОВА ШАХНОЗА МАМАЖАНОВНА\t+998(93)207-37-81\tНабиев Мумин\t+998(93)499-00-14\tкатта лейтенант Рахимжанов Рустамжон Махмуд ўғли\t+998(93)673-11-77
+27\tЭшонтўпи\tБобохонов Баходир Абдужаббарович\t+998(94)631-82-00\tХудойбердиев Муроджон Йўлдошали ўғли\t+998(94)508-45-45\tАлиев Азизбек\t+998(95)646-35-50\tМаматханова Мухаррам\t+998(93)417-94-40\tНОЗИМЖОНОВ АСАДБЕК МАХМУДЖОН ЎҒЛИ\t+998(93)678-88-58\tИсоқжонов Темур\t+998(33)726-70-70\tкатта лейтенант Нишанов Адхамжон Абдурахим ўғли\t+998(94)150-74-94
+28\tАтлас\tБокижанова Барчиной Хусанбоевна\t+998(93)718-24-95\tСайдуллаев Лутфилла Абдуллаевич\t+998(94)171-02-39\tЭгамбердиев Мирахмад\t+998(94)754-21-21\tХожимуродова Хидоят\t+998(94)506-48-93\tМУЛЛАБОЕВ МУЗАФФАР РУСТАМОВИЧ\t+998(93)488-84-20\tИсоқжонов Темур\t+998(33)726-70-70\tлейтенант Қодиров Дилшоджон Шермухаммадович\t+998(93)261-77-00
+29\tЭлатан\tАбдулқосимов Улуғбек Абдиллажанович\t+998(94)213-00-88\tХабибуллаев Нодиржон Абдуллажон ўғли\t+998(94)380-75-72\tИсроилов Дилшодбек\t+998(99)171-60-00\tТурақулова Мухаббат\t+998(99)007-69-57\tТУРДАЛИЕВ ОТАБЕК БОТИРЖОН ЎҒЛИ\t+998(94)090-45-45\tИсоқжонов Темур\t+998(33)726-70-70\tкапитан Давронов Қобилжон Зокиржонович\t+998(94)151-22-00
+30\tКўчабоши\tЖўраев Тохир Акрамович\t+998(95)229-06-58\tВахобов Собитхон Анвар ўғли\t+998(94)509-99-33\tАбдурасулов Исломбек\t+998(88)257-01-93\tАкбарова Сайёра\t+998(93)587-87-80\tРАХИМОВ АБРОРЖОН ИСРОИЛ ЎҒЛИ\t+998(93)705-31-13\tИсоқжонов Темур\t+998(33)726-70-70\tкатта лейтенант Эгамбердиев Сардорбек Сохибжон ўғли\t+998(99)652-65-58
+31\tЯнгиер\tТўрабоев Юнусали Турсунбаевич\t+998(99)537-40-56\tУсмонов Элдор Абрарович\t+998(99)395-16-23\tОтаханов Мухаммадшариф\t+998(99)608-39-69\tИнаятова Мухайё\t+998(99)641-78-42\tРАСУЛОВА ИНОЯТХОН ТУРГУНПУЛАТОВНА\t+998(93)938-28-81\tАбдулхаев Фаррух\t+998(88)212-75-12\tЭргашев Акбар Одилжонович\t+998(94)274-08-55
+32\tГулистон\tАхунов Абдухалил Маматазимович\t+998(93)493-00-67\tДадамирзаев Умар Баходирович\t+998(77)023-00-07\tАбдумажидов Дониёр\t+998(99)320-29-39\tАтамирзаева Феруза\t+998(77)311-18-02\tУЛУХОНОВА ФАРИДАХОН САЙФИДДИН ҚИЗИ\t+998(93)462-86-03\tАбдурахимов Шавкат\t+998(94)176-90-50\tлейтенант Абдуғаффоров Асилбек Мирзохид ўғли\t+998(93)346-59-35
+33\tБўстон\tНематуллаев Ахмадали Лухмонович\t+998(99)521-63-31\tАбдулхакимов Бекзод Бахтиёр ўғли\t+998(77)708-75-77\tЭргашев Абдулатиф\t+998(94)178-30-08\tАтамирзаева Феруза\t+998(77)311-18-02\tБОБОМИРЗАЕВА ДИЛОРОМ НАБИЖАНОВНА\t+998(50)581-38-20\tАбдулхаев Фаррух\t+998(88)212-75-12\tлейтенант Қўчқаров Акмалжон Бурхонович\t+998(99)001-00-31
+34\tЁғду\tАбдураззақов Хасанбой Турсунович\t+998(95)008-03-75\tКамолов Хусниддин Бахтиёр ўғли\t+998(77)077-78-82\tЖўраев Улуғбек\t+998(93)947-17-05\tХаликова Озода\t+998(88)040-04-03\tАЛИМАТОВА АЗИЗАХОН ШЕРБАЕВНА\t+998(99)695-42-74\tНажмидинов Фахриддин\t+998(99)973-37-37\tкичик сержант Хамрақулов Бахтиёр Сирожиддинович\t+998(94)275-00-86
+35\tДехқонобод\tУсмонов Абдулазиз Жўраевич\t+998(90)279-22-12\tХамидов Жахонгир Тожиддинович\t+998(99)633-82-31\tМирзабдуллаева Саидахон\t+998(93)810-99-19\tОтажанова Гулинора\t+998(99)996-27-25\tТОЖИДИНОВА АЗИЗА БАХОДИРОВНА\t+998(99)995-05-13\tАбдурахимов Шавкат\t+998(94)176-90-50\tмайор Холмирзаев Отабек Луқмонжонович\t+998(93)948-53-27
+36\tМехнатобод\tНизамова Робияхон Юлдашхановна\t+998(99)315-71-73\tАхмедов Абдувосит Абдухалил ўғли\t+998(94)507-30-50\tКурбанов Муроджон\t+998(94)303-33-63\tИнамова Зилола\t+998(33)258-85-55\tХАКИМЖОНОВ ОМАДБЕК ШУНҚОР ЎҒЛИ\t+998(93)266-11-77\tРустамов Одилжон\t+998(93)154-69-59\tкатта лейтенант Иномов Иброхимжон Холмамат ўғли\t+998(93)949-89-19
+37\tУчкўприк\tИсроилов Акрамжон Хамидович\t+998(94)331-19-79\tУмаров Сайфулло Сайдуллаевич\t+998(93)880-44-77\tБаҳриддинов Сирожиддин\t+998(94)074-90-70\tЖумабаева Гулчехра\t+998(99)609-85-52\tМАМАДАЛИЕВА ДИЛРАБО НЕЪМАТЖОНОВНА\t+998(99)002-65-25\tАбдурахимов Шавкат\t+998(94)176-90-50\tподполковник вакант\t
+38\tПахтачи\tТошбоев Зафарбек Эркинович\t+998(99)141-54-56\tХасанов Сардорбек Равшан ўғли\t+998(77)006-80-00\tОрипов Саидабдулло\t+998(99)182-40-80\tЖумабаева Гулчехра\t+998(99)609-85-52\tМАМАТОВА ДИЛАРОМ ЮСУФЖАНОВНА\t+998(93)154-08-16\tСарибаев Ихволжон\t+998(94)158-77-27\tлейтенант Собиржонов Асатбек Комилжон ўғли\t+998(99)324-78-83
+39\tҚўрғонча\tРахмонов Фарход Мухторжонович\t+998(50)500-02-70\tАрипов Хусниддин Хусанбаевич\t+998(99)440-71-11\tДжалилов Равшан\t+998(50)708-87-98\tТожибаева Феруза\t+998(94)927-11-89\tНУРМУХАММЕДОВ ШАЙДУЛЛОБЕК НАЗИРЖОН ЎҒЛИ\t+998(94)159-41-44\tТурғунов Худойшукур\t+998(94)081-50-00\tмайор Солиев Жамолиддин Махмуджанович\t+998(93)340-68-11
+40\tМаданият\tРўзиматова Муқаддасхон Хусанбаевна\t+998(94)077-10-60\tНабиев Ислом Искандар ўғли\t+998(94)150-97-17\tНишонов Саиджон\t+998(95)063-04-94\tАбдурахманова Манзура\t+998(94)902-20-90\tВАЛИЕВА МУНОЖААТ КУЧКОРОВНА\t+998(94)902-40-99\tНажмидинов Фахриддин\t+998(99)973-37-37\tкапитан Каримов Акрамжон Комилжонович\t+998(94)302-16-01
+41\tКўприкбоши\tАбдуллаев Бахтиёр Абдугаффарович\t+998(94)509-44-77\tОтамирзаев Шерзод Бахтиёр ўғли\t+998(94)509-99-80\tАбдумаликов Мухаммаддин\t+998(94)174-54-34\tХасанова Гулчехра\t+998(94)306-51-16\tАКБАРОВА ЗУХРА СОБИРЖАНОВНА\t+998(50)003-88-53\tВалиев Ахрор\t+998(95)062-70-50\tкатта лейтенант Бурханов Мансуржон Хасанбоевич\t+998(93)496-49-96
+42\tҚумтўғон\tИсақова Дилдора\t+998(99)406-89-87\tСаматов Иқбол Қосимжонович\t+998(93)911-00-97\tЖўраев Дилшодбек\t+998(94)596-71-17\tХасанова Гулчехра\t+998(94)306-51-16\tЁКУБОВА НАСИМБОНУ УМАРЖОН КИЗИ\t+998(95)857-05-83\tТурғунов Худойшукур\t+998(94)081-50-00\tмайор Ёқубов Самандар Икромжон ўғли\t+998(88)440-04-06
+43\tСоҳил\tАбдувалиева Гулхумор Ураимовна\t+998(93)492-05-32\tХолматов Шухрат Шавкатжон ўғли\t+998(99)607-06-05\tБахтиёров Икромжон\t+998(94)508-14-36\tХабибаева Рахима\t+998(99)924-29-66\tБАДАЛОВА НАСИБАХОН СИДИҚЖОН ҚИЗИ\t+998(95)624-44-48\tМарипов Рахимжон\t+998(99)320-88-99\tмайор Убайдуллаев Шерали Нурмухаммадович\t+998(93)710-78-73
+44\tЎрдабоғ\tТўраев Атхамжон\t+998(91)180-82-46\tМусаев Темурмалик Қутбиддинович\t+998(94)098-32-33\tШарифжонов Мухриддин\t+998(93)306-01-11\tАбдугаппарова Мухаррам\t+998(94)907-14-29\tҒУЛОМОВ САРДОРБЕК ИКРОМЖОН ЎҒЛИ\t+998(88)828-05-50\tДадабоев Жамолиддин\t+998(97)254-60-70\tБуронов Фаррух Зокиржонович\t+998(93)401-66-58
+45\tТуркистон\tЯкубова Саодат Абитдиновна\t+998(93)093-99-95\tХоджимирзаев Яхё Сирожиддинович\t+998(93)247-02-02\tТўраев Аброр\t+998(99)316-59-21\tИнамова Зилола\t+998(33)258-85-55\tАСАТУЛЛАЕВА УМИДА РАХИМЖАНОВНА\t+998(99)336-75-75\tРустамов Одилжон\t+998(93)154-69-59\tкатта лейтенант Исматуллаев Аброрбек Одилжон ўғли\t+998(93)776-32-16
+46\tЁрқин ҳаёт\tХасанов Маруфжон Обиджон ўғли\t+998(93)495-80-58\tРузибаев Элмурод Бахромжонович\t+998(93)498-69-79\tИсроилов Акрамжон\t+998(93)945-13-14\tБобоева Шахноза\t+998(94)277-67-83\tНАЖМИДДИНОВА УМИДАХОН МУХАММАДЖАНОВНА\t+998(93)284-00-59\tАхмадалиев Абдумалик\t+998(94)508-00-90\tкатта лейтенант Уринов Шерзод Давлатали ўғли\t+998(88)231-71-71
+47\tСаноат\tИргашев Аброр Алижонович\t+998(91)177-11-69\tҚосимов Ахмаджон Шокиржон ўғли\t+998(94)843-57-67\tУсмонжонова Мадина\t+998(93)768-01-11\tСобирова Мухайё\t+998(93)364-15-45\tМУЙДИНОВА ДИЛФУЗА ЖУРАЕВНА\t+998(93)402-55-61\tСарибаев Ихволжон\t+998(94)158-77-27\tкатта лейтенант Умматалиев Нодиржон Баходир ўғли\t+998(94)177-27-97
+48\tФарғона\tТошкентбоева Гулноза Холмирзаевна\t+998(93)610-11-31\tЖўраев Сухроб Абдумажид ўғли\t+998(93)277-07-77\tХошимов Акбаржон\t+998(99)978-80-33\tвакант\t\tРУСТАМОВА ФЕРУЗА ҚАЙИМЖОН ҚИЗИ\t+998(95)173-70-30\tИсоқов Хайрулло\t+998(94)895-50-00\tкапитан Мамадалиев Қахрамон Нематович\t+998(97)620-13-43
+49\tШодлик\tСаттибаев Уткирбек Абдуллахатович\t+998(94)747-07-42\tТурдиев Рахматулло Баходир ўғли\t+998(95)013-92-92\tЖўраев Абдурасул\t+998(97)427-04-03\tДжўраева Азиза\t+998(94)664-08-31\tСАЛИЖОНОВА КАРОМАТХОН БОХОДИР ҚИЗИ\t+998(93)962-88-11\tОдилов Муслим\t+998(94)505-09-09\tкатта лейтенант Ахмедов Мусожон Муроджон ўғли\t+998(93)946-61-11
+50\tФайзиобод\tУсманова Гулмира Абдулахатовна\t+998(94)408-42-65\tСултонов Дилшод Абдухалилович\t+998(99)462-24-66\tАсриддинов Рахматилло\t+998(93)424-22-25\tДжўраева Азиза\t+998(94)664-08-31\tТУРДИЕВА НАЗОКАТ БОТИРЖОН ҚИЗИ\t+998(94)508-75-57\tИсоқов Хайрулло\t+998(94)895-50-00\tкатта лейтенант Олимжонов Муродилла Музаффар ўғли\t+998(93)353-32-32
+51\tОқтовлиқ\tТурғунов Бахтиёр Ғуломович\t+998(93)705-01-83\tХасанов Саддам Толибович\t+998(77)254-00-05\tТўхтамирзев Улуғбек\t+998(93)494-44-27\tТурсунова Шаходат\t+998(94)590-79-78\tМАХКАМОВА ДИЛНОЗ ХУСАНБАЕВНА\t+998(94)590-79-78\tИсоқов Хайрулло\t+998(94)895-50-00\tлейтенант Қодиров Илхомжон Иброхим ўғли\t+998(90)222-09-07
+52\tНавоий\tХўжакелдиев Икромжон Аҳаджонович\t+998(94)213-48-83\tКамолов Исмоилхўжа Баходирхўжа ўғли\t+998(94)151-86-69\tИсматуллаев Фазлиддин\t+998(90)200-04-23\tАбдурахманова Нодира\t+998(93)045-05-65\tНУРАЛИЕВ АСРОРБЕК ХОЛМАМАТ ЎҒЛИ\t+998(93)363-88-55\tРустамов Одилжон\t+998(93)154-69-59\tподполковник Муродов Абдурахмон Толибжонович\t+998(99)393-22-92
+53\tФаровон\tБозорова Жамила Гафуровна\t+998(94)176-18-64\tСупижонов Нуманжон Нематович\t+998(94)171-10-71\tДавлатов Ўткирбек\t+998(91)360-94-59\tТожибаева Хамида\t+998(93)173-69-24\tКОМИЛОВА ФЕРУЗА АБДУМУМИН ҚИЗИ\t+998(50)715-64-60\tМарипов Рахимжон\t+998(99)320-88-99\tкатта лейтенант Абдувалиев Жасурбек Комилжон ўғли\t+998(94)553-16-00
+54\tШолдирама\tАдашева Гулноз Зиёбиддиновна\t+998(93)696-01-26\tИсмоилжонов Абдулбоки Исмоилжон ўғли\t+998(93)584-85-58\tХомидов Абдулбосит\t+998(93)173-01-95\tТурсунова Шаходат\t+998(94)590-79-78\tТАЖИБАЕВА УКТАМХОН АБДУҒАПИРОВНА\t+998(95)360-77-66\tНабиев Мумин\t+998(93)499-00-14\tмайор Хайдаров Музаффар Рахмоналиевич\t+998(94)175-43-33
+55\tМустақиллик\tҚурбонов Илхом Исакжанович\t+998(97)150-66-68\tОдилжанов Улуғбек Дилшод ўғли\t+998(93)006-01-05\tТоштемиров Элмурод\t+998(93)261-40-11\tТожибаева Мухтарамхон\t+998(93)407-51-63\tҚОБИЛОВА ДИЛДОРА ҚОДИРАЛИЕВНА\t+998(93)925-97-27\tБобоев Жохонгир\t+998(97)257-07-09\tкатта лейтенант Мамасолиев Бобур Алишер ўғли\t+998(93)494-72-77
+56\tТегирмон\tИсмолова Наргиза Исакжановна\t+998(93)677-43-79\tАраббоев Абдуғаффор Нурилло ўғли\t+998(94)636-99-00\tТожимирзаева Севара\t+998(94)277-11-07\tИнамова Зулфия\t+998(93)440-15-40\tУМАРОВА НАРГИЗА КАРИМОВНА\t+998(94)270-55-38\tВалиев Ахрор\t+998(95)062-70-50\tкапитан Исламов Шерзод Зулфиқарович\t+998(97)620-52-02
+57\tКаттамўғол\tҚосимов Улуғбек Эргашалиевич\t+998(93)819-57-70\tҚамбаров Санжарбек Асқарович\t+998(93)495-81-19\tУсубжанова Махфуза\t+998(95)236-50-50\tДехканова Наргиза\t+998(94)170-15-01\tЭРГАШЕВА ХУСНИДДИН НЕМАТОВИЧ\t+998(94)631-31-81\tЙигиталиев Акмалжон\t+998(97)259-77-67\tлейтенант Деҳқанов Хусниддин Ибодуллаевич\t+998(93)325-50-02
+58\tТинчлик\tИсраилов Комилжон Собиржонович\t+998(93)943-71-68\tБолтабоев Акрамжон Икромжонович\t+998(93)150-84-44\tМахмудов Шарифжон\t+998(93)446-77-17\tАлимова Малохатхон\t+998(94)176-69-00\tХАЖИМИРЗАЕВ УТКИР ТУРСУНПУЛАТОВИЧ\t+998(94)355-00-88\tБобоев Жохонгир\t+998(97)257-07-09\tкатта лейтенант Азимов Иброхимжон Нозим ўғли\t+998(94)310-58-58
+59\tИстиқбол\tУбаева Ойсулув Ахмадовна\t+998(94)175-69-10\tЭсанов Нодирбек Тохир ўғли\t+998(94)629-41-55\tСамандаров Аббос\t+998(97)226-62-22\tАлимова Малохатхон\t+998(94)176-69-00\tҚАЮМОВ МАКСАДБЕК МАРИПЖОН ЎҒЛИ\t+998(94)157-14-44\tЙигиталиев Акмалжон\t+998(97)259-77-67\tкапитан Абдуқаххаров Адхам Абдуқаххор ўғли\t+998(94)278-86-89
+60\tЯнги хаёт\tГаниев Алимардон Эргашбаевич\t+998(95)100-53-80\tРахимов Азизбек Аъзамжонович\t+998(93)210-83-88\tЁқубжанов Шерзод\t+998(88)900-99-32\tИнамова Зулфия\t+998(93)440-15-40\tЁҚУБЖОНОВА ЗИЛОЛАБОНУ ШУКУРЖОН ҚИЗИ\t+998(88)073-17-03\tДадабоев Жамолиддин\t+998(97)254-60-70\tлейтенант Обиджонов Қобилжон Хасанбой ўғли\t+998(97)258-78-38
+61\tҚурама\tСаримсоқова Насиба Исмонжановна\t+998(94)279-46-08\tАзизов Шерзод Шарофиддин ўғли\t+998(94)300-00-06\tАбдухакимов Хусниддин\t+998(97)373-22-33\tДехканова Наргиза\t+998(94)170-15-01\tКОРАБОЕВА МУАТТАРХОН МАМАСИДИҚОВНА\t+998(93)816-02-85\tДадабоев Жамолиддин\t+998(97)254-60-70\tлейтенант Туланбоев Мирзабек Баходир ўғли\t+998(95)828-10-99\
 """
 
 def parse_mahalla_tsv(tsv: str):
-    lines = [ln.strip() for ln in (tsv or "").splitlines() if ln.strip()]
-    if not lines:
-        return []
+    lines = [ln.strip() for ln in tsv.splitlines() if ln.strip()]
+    if not lines: return []
     header = lines[0].split("\t")
     rows = []
     for ln in lines[1:]:
         parts = ln.split("\t")
-        # yetishmasa to‘ldirib qo‘yamiz
         while len(parts) < len(header):
             parts.append("")
-        # MFY nomi 2-ustun
         mfy = parts[1].strip()
-        if not mfy:
-            continue
-        # 7 rol: (name, phone) ketma-ket
-        # indekslar: 2..15
+        if not mfy: continue
         data = []
         idx = 2
         for _ in range(7):
-            name = parts[idx].strip(); idx += 1
+            name  = parts[idx].strip() if idx < len(parts) else ""; idx += 1
             phone = parts[idx].strip() if idx < len(parts) else ""; idx += 1
             data.append({"name": name, "phone": normalize_phone(phone)})
         rows.append({"mfy": mfy, "roles": data})
     return rows
 
 MAHALLA_ROWS = parse_mahalla_tsv(MAHALLA_TSV)
-# sorted (lotin bo‘yicha)
 MAHALLA_ROWS.sort(key=lambda x: tr(x["mfy"]).lower())
 
-# =========================
-# 6) STATE
-# =========================
-STATE = {}  # chat_id -> dict
-
-def set_state(chat_id, **kwargs):
-    st = STATE.get(chat_id, {})
-    st.update(kwargs)
-    STATE[chat_id] = st
-
-def get_state(chat_id):
-    return STATE.get(chat_id, {})
-
-# =========================
-# 7) MENU HELPERS
-# =========================
+# ============================================================
+# 10. MENU HELPERS
+# ============================================================
 def main_menu():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     kb.add("Hokimiyat", "Tashkilotlar", "Mahalla")
@@ -364,443 +497,625 @@ def hokimiyat_menu():
     kb.add("Rahbariyat", "Apparat", "Orqaga")
     return kb
 
-def staff_menu(group):
+def staff_menu(group: str):
     keys = [k for k, v in STAFF.items() if v.get("group") == group]
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
-    kb.add(*keys)
-    kb.add("Orqaga")
+    kb.add(*keys); kb.add("Orqaga")
     return kb
 
-def staff_card(key):
+def staff_card(key: str) -> str:
     s = STAFF[key]
-    phone = s.get("phone") or "—"
-    name = tr(s.get("name", ""))
-    role = tr(s.get("role", ""))
-    return f"👤 **{name}**\n📌 Lavozim: {role}\n📞 Tel: `{phone}`"
+    return (f"👤 *{tr(s.get('name',''))}*\n"
+            f"📌 Lavozim: {tr(s.get('role',''))}\n"
+            f"📞 Tel: `{s.get('phone','—')}`")
 
 def tashkilotlar_menu():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    kb.add(*ORGS.keys())
-    kb.add("Orqaga")
+    kb.add(*ORGS.keys()); kb.add("Orqaga")
     return kb
 
-def short_role_text(role: str) -> str:
-    r = (role or "").strip()
-    # qisqartirish (xohlasangiz ko‘paytiramiz)
-    reps = {
-        "boshqaruvchisi":"boshqar.",
-        "boshqaruvchisi":"boshqar.",
-        "rahbari":"rahb.",
-        "boshlig‘i":"bosh.",
-        "bo‘limi":"bo‘lim",
-        "direktori":"dir.",
-        "mchj":"MChJ",
-        "filiali":"fil.",
-    }
-    out = tr(r)
-    for k, v in reps.items():
-        out = re.sub(r"\b"+re.escape(tr(k))+r"\b", v, out, flags=re.IGNORECASE)
-    return out
+def short_role(role: str) -> str:
+    r = tr(role or "")
+    for k, v in [("rahbari","rahb."),("boshlig'i","bosh."),("direktori","dir."),
+                 ("boshqaruvchisi","boshqar."),("bo'limi","bo'lim")]:
+        r = re.sub(r"\b" + re.escape(k) + r"\b", v, r, flags=re.IGNORECASE)
+    return r
 
-def org_item_label(it):
-    # TUGMADA: faqat lavozim (qisqa) + familiya/ism
-    name = tr(it.get("name", "")).strip()
-    role = short_role_text(it.get("role", ""))
-    base = role if role else name
-    # juda uzun bo‘lsa kesamiz
+def org_item_label(it: dict) -> str:
+    base = short_role(it.get("role","")) or tr(it.get("name",""))
     base = re.sub(r"\s+", " ", base).strip()
     return (base[:42] + "…") if len(base) > 43 else base
 
-# =========================
-# 8) INLINE LIST HELPERS (Tashkilotlar + Mahalla)
-# =========================
-def build_paged_inline(items, page, prefix, cols=2, per_page=20, title=""):
-    """
-    items: list of dict with 'label'
-    callback: f"{prefix}:i:{index}"
-    nav: f"{prefix}:p:{page}"
-    """
+def build_paged_inline(items, page, prefix, cols=2, per_page=20):
     total = len(items)
-    if total == 0:
-        return types.InlineKeyboardMarkup()
-
-    max_page = (total - 1) // per_page
-    page = max(0, min(page, max_page))
-    start = page * per_page
-    end = min(total, start + per_page)
-
+    if not total: return types.InlineKeyboardMarkup()
+    max_p = (total - 1) // per_page
+    page  = max(0, min(page, max_p))
     kb = types.InlineKeyboardMarkup(row_width=cols)
-
     row = []
-    for i in range(start, end):
+    for i in range(page*per_page, min(total, (page+1)*per_page)):
         row.append(types.InlineKeyboardButton(items[i]["label"], callback_data=f"{prefix}:i:{i}"))
-        if len(row) >= cols:
-            kb.row(*row); row = []
-    if row:
-        kb.row(*row)
-
+        if len(row) >= cols: kb.row(*row); row = []
+    if row: kb.row(*row)
     nav = []
-    if page > 0:
-        nav.append(types.InlineKeyboardButton("⬅️ Oldingi", callback_data=f"{prefix}:p:{page-1}"))
-    if page < max_page:
-        nav.append(types.InlineKeyboardButton("Keyingi ➡️", callback_data=f"{prefix}:p:{page+1}"))
-    if nav:
-        kb.row(*nav)
+    if page > 0:    nav.append(types.InlineKeyboardButton("⬅️ Oldingi", callback_data=f"{prefix}:p:{page-1}"))
+    if page < max_p:nav.append(types.InlineKeyboardButton("Keyingi ➡️", callback_data=f"{prefix}:p:{page+1}"))
+    if nav: kb.row(*nav)
+    kb.row(types.InlineKeyboardButton("🔎 Qidirish", callback_data=f"{prefix}:s:0"),
+           types.InlineKeyboardButton("🏠 Bosh sahifa", callback_data=f"{prefix}:home:0"))
+    return kb
 
-    kb.row(
-        types.InlineKeyboardButton("🔎 Qidirish", callback_data=f"{prefix}:s:1"),
-        types.InlineKeyboardButton("🏠 Bosh sahifa", callback_data=f"{prefix}:home:1"),
+def org_card(it: dict, cat: str) -> str:
+    ph = normalize_phone(it.get("phone","")) or it.get("phone","—") or "—"
+    return (f"🏢 *{tr(cat)}*\n"
+            f"👤 {tr(it.get('name',''))}\n"
+            f"📌 {tr(it.get('role',''))}\n"
+            f"📞 Tel: `{ph}`")
+
+# ============================================================
+# 11. MAHALLA OUTPUT
+# ============================================================
+def mahalla_buttons_list(page=0, query=None):
+    out = [{"label": tr(r["mfy"]), "real_i": i}
+           for i, r in enumerate(MAHALLA_ROWS)
+           if not query or query.lower() in tr(r["mfy"]).lower()]
+    if not out: return None, 0, 0
+    per_p = 24; total = len(out)
+    max_p = (total - 1) // per_p
+    page  = max(0, min(page, max_p))
+    kb = types.InlineKeyboardMarkup(row_width=3)
+    row_btns = []
+    for j in range(page*per_p, min(total, (page+1)*per_p)):
+        row_btns.append(types.InlineKeyboardButton(
+            out[j]["label"], callback_data=f"mfy:i:{out[j]['real_i']}"))
+        if len(row_btns) >= 3: kb.row(*row_btns); row_btns = []
+    if row_btns: kb.row(*row_btns)
+    nav = []
+    if page > 0:    nav.append(types.InlineKeyboardButton("⬅️ Oldingi", callback_data=f"mfy:p:{page-1}"))
+    if page < max_p:nav.append(types.InlineKeyboardButton("Keyingi ➡️", callback_data=f"mfy:p:{page+1}"))
+    if nav: kb.row(*nav)
+    kb.row(types.InlineKeyboardButton("🔎 Qidirish", callback_data="mfy:s:0"),
+           types.InlineKeyboardButton("🏠 Bosh sahifa", callback_data="mfy:home:0"))
+    return kb, page, max_p
+
+def mahalla_card(idx: int) -> str:
+    row = MAHALLA_ROWS[idx]
+    lines = [f"🏘️ *{tr(row['mfy'])} MFY*"]
+    for i, (_, label, emoji) in enumerate(ROLE_META):
+        p   = row["roles"][i] if i < len(row["roles"]) else {}
+        fio = tr(p.get("name","")).strip() or "Vakant"
+        ph  = p.get("phone","") or "—"
+        lines.append(f"{emoji} *{label}:* {fio}\n📞 `{ph}`")
+    return "\n\n".join(lines)
+
+# ============================================================
+# 12. ADMIN KEYBOARDS
+# ============================================================
+def admin_main_kb() -> types.InlineKeyboardMarkup:
+    badge = f" 🔴{len(PENDING)}" if PENDING else ""
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        types.InlineKeyboardButton(f"👥 Foydalanuvchilar", callback_data="adm:users:0"),
+        types.InlineKeyboardButton(f"⏳ Kutayotganlar{badge}", callback_data="adm:pend:0"),
+        types.InlineKeyboardButton("🏛️ Hokimiyat", callback_data="adm:hok:0"),
+        types.InlineKeyboardButton("🏢 Tashkilotlar", callback_data="adm:orgs:0"),
     )
     return kb
 
-def ask_search(chat_id, mode, cat=None):
-    set_state(chat_id, mode=mode, cat=cat, awaiting_search=True)
-    bot.send_message(chat_id, "🔎 Qidirish uchun matn yozing (masalan: ism yoki lavozim):")
+def _safe_edit(chat_id, msg_id, text, kb=None):
+    try:
+        bot.edit_message_text(text, chat_id, msg_id,
+                              reply_markup=kb, parse_mode="Markdown")
+    except Exception as e:
+        if "not modified" not in str(e).lower():
+            print(f"edit_message error: {e}")
 
-# =========================
-# 9) ORG CARDS
-# =========================
-def org_card(it, cat):
-    phone = it.get("phone") or "—"
-    name = tr(it.get("name", ""))
-    role = tr(it.get("role", ""))
-    phone_n = normalize_phone(phone) if phone != "—" else ""
-    show_phone = phone_n if phone_n else phone
-    return f"🏢 **{tr(cat)}**\n👤 {name}\n📌 {role}\n📞 Tel: `{show_phone}`"
+# ============================================================
+# 13. ACCESS HINT
+# ============================================================
+def _access_hint(m):
+    bot.send_message(m.chat.id,
+        "⛔️ *Ruxsat yo'q.*\n/start yozing va admin tasdiqlashini kuting.",
+        parse_mode="Markdown")
 
-# =========================
-# 10) MAHALLA OUTPUT
-# =========================
-def mahalla_buttons_list(page=0, query=None):
-    items = []
-    for idx, row in enumerate(MAHALLA_ROWS):
-        mfy = tr(row["mfy"])
-        if query:
-            if query.lower() not in mfy.lower():
-                continue
-        items.append({"label": mfy, "idx": idx})
-
-    # map idx to real index for callbacks
-    # callback needs absolute index in MAHALLA_ROWS; easiest: store "real_i"
-    out = []
-    for it in items:
-        out.append({"label": it["label"], "real_i": it["idx"]})
-
-    # build inline with custom callback for real_i
-    total = len(out)
-    if total == 0:
-        return None, 0, 0
-
-    per_page = 24
-    max_page = (total - 1) // per_page
-    page = max(0, min(page, max_page))
-
-    kb = types.InlineKeyboardMarkup(row_width=3)
-    start = page * per_page
-    end = min(total, start + per_page)
-
-    row_btns = []
-    for j in range(start, end):
-        real_i = out[j]["real_i"]
-        label = out[j]["label"]
-        row_btns.append(types.InlineKeyboardButton(label, callback_data=f"mfy:i:{real_i}"))
-        if len(row_btns) >= 3:
-            kb.row(*row_btns); row_btns = []
-    if row_btns:
-        kb.row(*row_btns)
-
-    nav = []
-    if page > 0:
-        nav.append(types.InlineKeyboardButton("⬅️ Oldingi", callback_data=f"mfy:p:{page-1}"))
-    if page < max_page:
-        nav.append(types.InlineKeyboardButton("Keyingi ➡️", callback_data=f"mfy:p:{page+1}"))
-    if nav:
-        kb.row(*nav)
-
-    kb.row(
-        types.InlineKeyboardButton("🔎 Qidirish", callback_data="mfy:s:1"),
-        types.InlineKeyboardButton("🏠 Bosh sahifa", callback_data="mfy:home:1"),
-    )
-    return kb, page, max_page
-
-def mahalla_card(mfy_index: int):
-    row = MAHALLA_ROWS[mfy_index]
-    title = tr(row["mfy"])
-    roles = row["roles"]
-
-    lines = [f"🏘️ **{title} MFY**"]
-    for i, meta in enumerate(ROLE_META):
-        key, label, emoji = meta
-        person = roles[i] if i < len(roles) else {"name":"", "phone":""}
-        fio = tr(person.get("name", "")).strip() or "Vakant"
-        ph = normalize_phone(person.get("phone", ""))
-        if ph:
-            lines.append(f"{emoji} **{label}:** {fio}\n📞 `{ph}`")
-        else:
-            lines.append(f"{emoji} **{label}:** {fio}\n📞 `—`")
-    return "\n\n".join(lines)
-
-# =========================
-# 11) HANDLERS
-# =========================
+# ============================================================
+# 14. HANDLERS — Foydalanuvchi buyruqlari
+# ============================================================
 @bot.message_handler(commands=["start"])
-def start(m):
-    if ensure_allowed_or_hint(m):
+def cmd_start(m):
+    uid = m.from_user.id
+    if not is_allowed(uid):
+        if not ADMIN_IDS:
+            bot.send_message(m.chat.id, "⛔️ Ruxsat yo'q. Admin bilan bog'laning.")
+            return
+        if str(uid) in PENDING:
+            bot.send_message(m.chat.id,
+                "⏳ So'rovingiz allaqachon yuborilgan.\nAdmin tasdiqlashini kuting...")
+            return
+        if send_access_request(m.from_user, m.chat.id):
+            bot.send_message(m.chat.id,
+                "⏳ *Kirish so'rovingiz adminlarga yuborildi.*\nTasdiqlashni kuting...",
+                parse_mode="Markdown")
+        else:
+            bot.send_message(m.chat.id, "⛔️ Ruxsat yo'q. Admin bilan bog'laning.")
         return
-    set_state(m.chat.id, mode="main", cat=None, awaiting_search=False)
-    bot.send_message(m.chat.id, "Uchqo‘rg‘on botiga xush kelibsiz!", reply_markup=main_menu())
+    set_state(m.chat.id, mode="main", awaiting_search=False)
+    bot.send_message(m.chat.id, "Uchqo'rg'on botiga xush kelibsiz! 👋",
+                     reply_markup=main_menu())
 
-@bot.message_handler(func=lambda m: (m.text or "").strip().lower() == SECRET_PHRASE)
-def secret_handler(m):
-    grant_access(m)
+@bot.message_handler(commands=["admin"])
+def cmd_admin(m):
+    if not is_admin(m.from_user.id):
+        bot.send_message(m.chat.id, "❌ Siz admin emassiz."); return
+    clear_astate(m.from_user.id)
+    bot.send_message(m.chat.id, "⚙️ *Admin paneli*\nNimani boshqarmoqchisiz?",
+                     reply_markup=admin_main_kb(), parse_mode="Markdown")
+
+@bot.message_handler(commands=["cancel"])
+def cmd_cancel(m):
+    clear_astate(m.from_user.id)
+    bot.send_message(m.chat.id, "❌ Bekor qilindi.", reply_markup=main_menu())
 
 @bot.message_handler(func=lambda m: m.text == "Hokimiyat")
-def hokimiyat(m):
-    if ensure_allowed_or_hint(m):
-        return
-    set_state(m.chat.id, mode="hokimiyat", cat=None, awaiting_search=False)
-    bot.send_message(m.chat.id, "Bo‘limni tanlang:", reply_markup=hokimiyat_menu())
+def h_hokimiyat(m):
+    if not is_allowed(m.from_user.id): _access_hint(m); return
+    set_state(m.chat.id, mode="hokimiyat")
+    bot.send_message(m.chat.id, "Bo'limni tanlang:", reply_markup=hokimiyat_menu())
 
 @bot.message_handler(func=lambda m: m.text == "Rahbariyat")
-def rahbariyat(m):
-    if ensure_allowed_or_hint(m):
-        return
-    set_state(m.chat.id, mode="staff", cat="rahbariyat", awaiting_search=False)
-    bot.send_message(m.chat.id, "Rahbariyat ro‘yxati:", reply_markup=staff_menu("rahbariyat"))
+def h_rahbariyat(m):
+    if not is_allowed(m.from_user.id): _access_hint(m); return
+    set_state(m.chat.id, mode="staff", cat="rahbariyat")
+    bot.send_message(m.chat.id, "Rahbariyat ro'yxati:", reply_markup=staff_menu("rahbariyat"))
 
 @bot.message_handler(func=lambda m: m.text == "Apparat")
-def apparat(m):
-    if ensure_allowed_or_hint(m):
-        return
-    set_state(m.chat.id, mode="staff", cat="apparat", awaiting_search=False)
+def h_apparat(m):
+    if not is_allowed(m.from_user.id): _access_hint(m); return
+    set_state(m.chat.id, mode="staff", cat="apparat")
     bot.send_message(m.chat.id, "Apparat xodimlari:", reply_markup=staff_menu("apparat"))
 
 @bot.message_handler(func=lambda m: m.text in STAFF)
-def staff_info(m):
-    if ensure_allowed_or_hint(m):
-        return
-    st = get_state(m.chat.id)
+def h_staff_info(m):
+    if not is_allowed(m.from_user.id): _access_hint(m); return
+    st    = get_state(m.chat.id)
     group = st.get("cat") if st.get("mode") == "staff" else None
-    bot.send_message(m.chat.id, staff_card(m.text), reply_markup=staff_menu(group) if group else hokimiyat_menu())
+    bot.send_message(m.chat.id, staff_card(m.text),
+                     reply_markup=staff_menu(group) if group else hokimiyat_menu(),
+                     parse_mode="Markdown")
 
 @bot.message_handler(func=lambda m: m.text == "Tashkilotlar")
-def tashkilotlar(m):
-    if ensure_allowed_or_hint(m):
-        return
-    set_state(m.chat.id, mode="tashkilot_cat", cat=None, awaiting_search=False)
+def h_tashkilotlar(m):
+    if not is_allowed(m.from_user.id): _access_hint(m); return
+    set_state(m.chat.id, mode="tashkilot_cat")
     bot.send_message(m.chat.id, "Kategoriya tanlang:", reply_markup=tashkilotlar_menu())
 
-@bot.message_handler(func=lambda m: m.text in ORGS.keys())
-def tashkilot_category(m):
-    if ensure_allowed_or_hint(m):
-        return
+@bot.message_handler(func=lambda m: m.text in ORGS)
+def h_tashkilot_cat(m):
+    if not is_allowed(m.from_user.id): _access_hint(m); return
     cat = m.text
-    set_state(m.chat.id, mode="tashkilot_list", cat=cat, awaiting_search=False, org_page=0, org_query=None)
-
-    items = []
-    for it in ORGS[cat]:
-        items.append({"label": org_item_label(it)})
-
-    kb = build_paged_inline(items, page=0, prefix="org", cols=2, per_page=20)
-    bot.send_message(m.chat.id, f"🏢 **{tr(cat)}** ro‘yxati (tugmani bosing):", reply_markup=kb)
+    set_state(m.chat.id, mode="tashkilot_list", cat=cat,
+              awaiting_search=False, org_page=0, org_query=None)
+    items = [{"label": org_item_label(it)} for it in ORGS[cat]]
+    bot.send_message(m.chat.id, f"🏢 *{tr(cat)}* ro'yxati:",
+                     reply_markup=build_paged_inline(items, 0, "org"),
+                     parse_mode="Markdown")
 
 @bot.message_handler(func=lambda m: m.text == "Mahalla")
-def mahalla(m):
-    if ensure_allowed_or_hint(m):
-        return
-    set_state(m.chat.id, mode="mahalla", awaiting_search=False, mfy_page=0, mfy_query=None)
-    kb, page, max_page = mahalla_buttons_list(page=0, query=None)
+def h_mahalla(m):
+    if not is_allowed(m.from_user.id): _access_hint(m); return
+    set_state(m.chat.id, mode="mahalla", mfy_page=0, mfy_query=None, awaiting_search=False)
+    kb, _, _ = mahalla_buttons_list()
     bot.send_message(m.chat.id, "🏘️ Mahallani tanlang:", reply_markup=kb)
 
 @bot.message_handler(func=lambda m: m.text == "Orqaga")
-def back(m):
-    if ensure_allowed_or_hint(m):
-        return
-    st = get_state(m.chat.id)
-    mode = st.get("mode")
+def h_back(m):
+    if not is_allowed(m.from_user.id): _access_hint(m); return
+    mode = get_state(m.chat.id).get("mode")
+    if mode == "staff":         h_hokimiyat(m)
+    elif mode == "tashkilot_list": h_tashkilotlar(m)
+    else:                       cmd_start(m)
 
-    if mode == "staff":
-        hokimiyat(m)
-        return
-
-    if mode == "tashkilot_list":
-        # kategoriya menyusiga qaytish
-        tashkilotlar(m)
-        return
-
-    if mode == "mahalla":
-        start(m)
-        return
-
-    start(m)
-
-# =========================
-# 12) CALLBACKS (inline tugmalar)
-# =========================
+# ============================================================
+# 15. CALLBACKS — Hammasi bir joyda
+# ============================================================
 @bot.callback_query_handler(func=lambda c: True)
-def callbacks(c):
+def all_callbacks(c):
+    data    = c.data or ""
     chat_id = c.message.chat.id
-    if not is_allowed(c.from_user.id):
-        bot.answer_callback_query(c.id, "Ruxsat yo‘q.", show_alert=True)
+    uid     = c.from_user.id
+
+    # ── Kirish so'rovlari: ap: / rj: ──────────────────────────
+    if data.startswith("ap:") or data.startswith("rj:"):
+        if not is_admin(uid):
+            bot.answer_callback_query(c.id, "❌ Ruxsat yo'q!", show_alert=True); return
+        action     = "approve" if data.startswith("ap:") else "reject"
+        target_uid = int(data.split(":")[1])
+        uid_str    = str(target_uid)
+        info       = PENDING.get(uid_str)
+        if not info:
+            bot.answer_callback_query(c.id, "Bu so'rov allaqachon ko'rib chiqilgan.",
+                                      show_alert=True)
+            try: bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=None)
+            except: pass
+            return
+        name = info["name"]
+        if action == "approve":
+            ALLOWED.add(target_uid); save_allowed()
+            PENDING.pop(uid_str);    save_pending()
+            try:
+                bot.send_message(info["chat_id"],
+                    "✅ *Kirish tasdiqlandi!*\n\n/start bosib botdan foydalaning.",
+                    parse_mode="Markdown", reply_markup=main_menu())
+            except: pass
+            bot.edit_message_text(
+                f"✅ *{name}* — ruxsat berildi\n👤 Admin: {c.from_user.first_name}",
+                chat_id, c.message.message_id, parse_mode="Markdown")
+        else:
+            PENDING.pop(uid_str); save_pending()
+            try: bot.send_message(info["chat_id"], "❌ Kirish so'rovingiz rad etildi.")
+            except: pass
+            bot.edit_message_text(
+                f"❌ *{name}* — rad etildi\n👤 Admin: {c.from_user.first_name}",
+                chat_id, c.message.message_id, parse_mode="Markdown")
+        bot.answer_callback_query(c.id); return
+
+    # ── Admin panel: adm: ──────────────────────────────────────
+    if data.startswith("adm:"):
+        if not is_admin(uid):
+            bot.answer_callback_query(c.id, "❌ Ruxsat yo'q!", show_alert=True); return
+        parts   = data.split(":")
+        section = parts[1]
+        page    = int(parts[2]) if len(parts) > 2 and parts[2].lstrip("-").isdigit() else 0
+
+        # Bosh panel
+        if section == "main":
+            _safe_edit(chat_id, c.message.message_id,
+                       "⚙️ *Admin paneli*\nNimani boshqarmoqchisiz?", admin_main_kb())
+            bot.answer_callback_query(c.id); return
+
+        # Kutayotganlar
+        if section == "pend":
+            if not PENDING:
+                bot.answer_callback_query(c.id, "Hozircha kutayotgan so'rov yo'q.",
+                                          show_alert=True); return
+            kb = types.InlineKeyboardMarkup()
+            for us, info in PENDING.items():
+                tid   = info["id"]
+                nm    = info["name"][:22]
+                uname = f"@{info['username']}" if info.get("username") else f"ID:{tid}"
+                kb.row(types.InlineKeyboardButton(f"👤 {nm}", callback_data="noop"),
+                       types.InlineKeyboardButton("✅",        callback_data=f"ap:{tid}"),
+                       types.InlineKeyboardButton("❌",        callback_data=f"rj:{tid}"))
+            kb.row(types.InlineKeyboardButton("◀️ Orqaga", callback_data="adm:main:0"))
+            _safe_edit(chat_id, c.message.message_id,
+                       f"⏳ *Kutayotgan so'rovlar* ({len(PENDING)} ta):", kb)
+            bot.answer_callback_query(c.id); return
+
+        # Foydalanuvchilar
+        if section == "users":
+            lst   = sorted(ALLOWED)
+            per_p = 10; total = len(lst)
+            si    = page * per_p; ei = min(total, si + per_p)
+            kb    = types.InlineKeyboardMarkup()
+            for u in lst[si:ei]:
+                kb.row(types.InlineKeyboardButton(f"🆔 {u}", callback_data="noop"),
+                       types.InlineKeyboardButton("🚫 Bloklash", callback_data=f"blk:{u}"))
+            nav = []
+            if page > 0:   nav.append(types.InlineKeyboardButton("⬅️", callback_data=f"adm:users:{page-1}"))
+            if ei < total: nav.append(types.InlineKeyboardButton("➡️", callback_data=f"adm:users:{page+1}"))
+            if nav: kb.row(*nav)
+            kb.row(types.InlineKeyboardButton("◀️ Orqaga", callback_data="adm:main:0"))
+            _safe_edit(chat_id, c.message.message_id,
+                       f"👥 *Foydalanuvchilar* ({total} ta):", kb)
+            bot.answer_callback_query(c.id); return
+
+        # Hokimiyat bo'limlari
+        if section == "hok":
+            kb = types.InlineKeyboardMarkup(row_width=1)
+            kb.add(types.InlineKeyboardButton("👥 Rahbariyat", callback_data="adm:hkg:r"),
+                   types.InlineKeyboardButton("👥 Apparat",    callback_data="adm:hkg:a"),
+                   types.InlineKeyboardButton("◀️ Orqaga",     callback_data="adm:main:0"))
+            _safe_edit(chat_id, c.message.message_id,
+                       "🏛️ *Hokimiyat* — bo'limni tanlang:", kb)
+            bot.answer_callback_query(c.id); return
+
+        if section == "hkg":
+            grp  = "rahbariyat" if parts[2] == "r" else "apparat"
+            keys = [k for k, v in STAFF.items() if v.get("group") == grp]
+            set_astate(uid, keys=keys, grp=grp)
+            kb = types.InlineKeyboardMarkup(row_width=1)
+            for i, k in enumerate(keys):
+                label = tr(STAFF[k].get("name", k))[:36]
+                kb.add(types.InlineKeyboardButton(f"✏️ {label}", callback_data=f"adm:es:{i}"))
+            kb.add(types.InlineKeyboardButton("◀️ Orqaga", callback_data="adm:hok:0"))
+            _safe_edit(chat_id, c.message.message_id,
+                       f"🏛️ *{grp.capitalize()}* xodimlari:", kb)
+            bot.answer_callback_query(c.id); return
+
+        if section == "es":
+            idx  = int(parts[2])
+            ast  = get_astate(uid)
+            keys = ast.get("keys", [])
+            if idx >= len(keys): bot.answer_callback_query(c.id); return
+            key  = keys[idx]; s = STAFF.get(key, {})
+            name = tr(s.get("name","—")); role = tr(s.get("role","—")); ph = s.get("phone","—")
+            grp  = s.get("group","rahbariyat")
+            kb   = types.InlineKeyboardMarkup(row_width=1)
+            kb.add(
+                types.InlineKeyboardButton(f"📝 Ism: {name[:30]}",  callback_data=f"edf:s:{idx}:n"),
+                types.InlineKeyboardButton("💼 Lavozimni o'zgartirish", callback_data=f"edf:s:{idx}:r"),
+                types.InlineKeyboardButton(f"📞 Tel: {ph}",         callback_data=f"edf:s:{idx}:p"),
+                types.InlineKeyboardButton("◀️ Orqaga",
+                    callback_data=f"adm:hkg:{'r' if grp=='rahbariyat' else 'a'}"),
+            )
+            _safe_edit(chat_id, c.message.message_id,
+                       f"✏️ *{name}*\n📌 {role}\n📞 {ph}", kb)
+            bot.answer_callback_query(c.id); return
+
+        # Tashkilotlar kategoriyalari
+        if section == "orgs":
+            cats = list(ORGS.keys())
+            kb   = types.InlineKeyboardMarkup(row_width=1)
+            for ci, cat in enumerate(cats):
+                kb.add(types.InlineKeyboardButton(f"🏢 {tr(cat)}", callback_data=f"adm:oc:{ci}"))
+            kb.add(types.InlineKeyboardButton("◀️ Orqaga", callback_data="adm:main:0"))
+            _safe_edit(chat_id, c.message.message_id,
+                       "🏢 *Tashkilotlar* — kategoriyani tanlang:", kb)
+            bot.answer_callback_query(c.id); return
+
+        if section == "oc":
+            ci    = int(parts[2]); cats = list(ORGS.keys())
+            if ci >= len(cats): bot.answer_callback_query(c.id); return
+            cat   = cats[ci]; items = ORGS.get(cat, [])
+            kb    = types.InlineKeyboardMarkup(row_width=1)
+            for ii, it in enumerate(items):
+                lbl = tr(it.get("name","—"))[:32]
+                kb.add(types.InlineKeyboardButton(f"✏️ {lbl}", callback_data=f"adm:oi:{ci}:{ii}"))
+            kb.add(types.InlineKeyboardButton("◀️ Orqaga", callback_data="adm:orgs:0"))
+            _safe_edit(chat_id, c.message.message_id, f"🏢 *{tr(cat)}*:", kb)
+            bot.answer_callback_query(c.id); return
+
+        if section == "oi":
+            ci    = int(parts[2]); ii = int(parts[3])
+            cats  = list(ORGS.keys())
+            if ci >= len(cats): bot.answer_callback_query(c.id); return
+            cat   = cats[ci]; items = ORGS.get(cat, [])
+            if ii >= len(items): bot.answer_callback_query(c.id); return
+            it    = items[ii]
+            name  = tr(it.get("name","—")); role = tr(it.get("role","—")); ph = it.get("phone","—")
+            kb    = types.InlineKeyboardMarkup(row_width=1)
+            kb.add(
+                types.InlineKeyboardButton(f"📝 Ism: {name[:30]}",   callback_data=f"edf:o:{ci}:{ii}:n"),
+                types.InlineKeyboardButton("💼 Lavozimni o'zgartirish",   callback_data=f"edf:o:{ci}:{ii}:r"),
+                types.InlineKeyboardButton(f"📞 Tel: {ph}",          callback_data=f"edf:o:{ci}:{ii}:p"),
+                types.InlineKeyboardButton("◀️ Orqaga",             callback_data=f"adm:oc:{ci}"),
+            )
+            _safe_edit(chat_id, c.message.message_id,
+                       f"✏️ *{name}*\n📌 {role}\n📞 {ph}", kb)
+            bot.answer_callback_query(c.id); return
+
+        bot.answer_callback_query(c.id); return
+
+    # ── Tahrirlash: edf: ──────────────────────────────────────
+    if data.startswith("edf:"):
+        if not is_admin(uid):
+            bot.answer_callback_query(c.id, "❌", show_alert=True); return
+        parts = data.split(":")
+        etype = parts[1]
+        FLBL  = {"n":"ism (F.I.O.)","r":"lavozim","p":"telefon raqam"}
+
+        if etype == "s":
+            idx = int(parts[2]); field = parts[3]
+            ast = get_astate(uid)
+            keys = ast.get("keys", [])
+            if idx >= len(keys): bot.answer_callback_query(c.id); return
+            set_astate(uid, action="edit_staff", idx=idx, keys=keys,
+                       grp=ast.get("grp",""), field=field)
+            bot.answer_callback_query(c.id)
+            bot.send_message(chat_id,
+                f"✏️ Yangi *{FLBL.get(field,field)}* yozing:\n_(Bekor qilish: /cancel)_",
+                parse_mode="Markdown"); return
+
+        if etype == "o":
+            ci = int(parts[2]); ii = int(parts[3]); field = parts[4]
+            set_astate(uid, action="edit_org", ci=ci, ii=ii, field=field)
+            bot.answer_callback_query(c.id)
+            bot.send_message(chat_id,
+                f"✏️ Yangi *{FLBL.get(field,field)}* yozing:\n_(Bekor qilish: /cancel)_",
+                parse_mode="Markdown"); return
+
+        bot.answer_callback_query(c.id); return
+
+    # ── Bloklash ──────────────────────────────────────────────
+    if data.startswith("blk:"):
+        if not is_admin(uid):
+            bot.answer_callback_query(c.id, "❌", show_alert=True); return
+        target = int(data.split(":")[1])
+        ALLOWED.discard(target); save_allowed()
+        bot.answer_callback_query(c.id, f"🚫 {target} bloklandi.", show_alert=True)
+        # Ro'yxatni yangilaymiz
+        lst   = sorted(ALLOWED); per_p = 10; total = len(lst)
+        kb    = types.InlineKeyboardMarkup()
+        for u in lst[:per_p]:
+            kb.row(types.InlineKeyboardButton(f"🆔 {u}", callback_data="noop"),
+                   types.InlineKeyboardButton("🚫 Bloklash", callback_data=f"blk:{u}"))
+        if total > per_p:
+            kb.row(types.InlineKeyboardButton("➡️", callback_data="adm:users:1"))
+        kb.row(types.InlineKeyboardButton("◀️ Orqaga", callback_data="adm:main:0"))
+        try: bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=kb)
+        except: pass
         return
 
-    data = c.data or ""
+    # ── noop ──────────────────────────────────────────────────
+    if data == "noop":
+        bot.answer_callback_query(c.id); return
 
-    # ---- Mahalla
+    # ── Foydalanuvchi: mfy / org ──────────────────────────────
+    if not is_allowed(uid):
+        bot.answer_callback_query(c.id, "Ruxsat yo'q.", show_alert=True); return
+
     if data.startswith("mfy:"):
-        parts = data.split(":")
-        action = parts[1]
-
+        parts = data.split(":"); action = parts[1]
         if action == "home":
             bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=None)
             bot.send_message(chat_id, "Bosh sahifa", reply_markup=main_menu())
-            set_state(chat_id, mode="main", awaiting_search=False)
-            bot.answer_callback_query(c.id)
-            return
-
+            set_state(chat_id, mode="main"); bot.answer_callback_query(c.id); return
         if action == "s":
+            set_state(chat_id, mode="mahalla_search", awaiting_search=True)
             bot.answer_callback_query(c.id)
-            ask_search(chat_id, mode="mahalla_search")
-            return
-
+            bot.send_message(chat_id, "🔎 Mahalla nomini yozing:"); return
         if action == "p":
-            page = int(parts[2])
-            st = get_state(chat_id)
-            q = st.get("mfy_query")
-            kb, _, _ = mahalla_buttons_list(page=page, query=q)
-            set_state(chat_id, mode="mahalla", mfy_page=page, awaiting_search=False)
+            pg = int(parts[2]); q = get_state(chat_id).get("mfy_query")
+            kb, _, _ = mahalla_buttons_list(page=pg, query=q)
+            set_state(chat_id, mfy_page=pg)
             bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=kb)
-            bot.answer_callback_query(c.id)
-            return
-
+            bot.answer_callback_query(c.id); return
         if action == "i":
-            idx = int(parts[2])
-            text = mahalla_card(idx)
-            bot.send_message(chat_id, text)
-            bot.answer_callback_query(c.id)
-            return
+            bot.send_message(chat_id, mahalla_card(int(parts[2])), parse_mode="Markdown")
+            bot.answer_callback_query(c.id); return
 
-    # ---- Tashkilotlar (org)
     if data.startswith("org:"):
-        parts = data.split(":")
-        action = parts[1]
-        st = get_state(chat_id)
-        cat = st.get("cat")
-
+        parts = data.split(":"); action = parts[1]
+        st = get_state(chat_id); cat = st.get("cat")
         if action == "home":
             bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=None)
             bot.send_message(chat_id, "Bosh sahifa", reply_markup=main_menu())
-            set_state(chat_id, mode="main", awaiting_search=False)
-            bot.answer_callback_query(c.id)
-            return
-
+            set_state(chat_id, mode="main"); bot.answer_callback_query(c.id); return
         if not cat or cat not in ORGS:
-            bot.answer_callback_query(c.id, "Kategoriya topilmadi.", show_alert=True)
-            return
-
-        # qidiruv rejimi bo‘lsa, filtrlangan ro‘yxat bilan ishlaymiz
+            bot.answer_callback_query(c.id, "Kategoriya topilmadi.", show_alert=True); return
         q = st.get("org_query")
-        base_items = []
-        base_map = []  # filtered index -> real index
+        base_items = []; base_map = []
         for i, it in enumerate(ORGS[cat]):
-            label = org_item_label(it)
-            if q and (q.lower() not in label.lower()) and (q.lower() not in tr(it.get("name","")).lower()):
+            lbl = org_item_label(it)
+            if q and q.lower() not in lbl.lower() and q.lower() not in tr(it.get("name","")).lower():
                 continue
-            base_items.append({"label": label})
-            base_map.append(i)
-
+            base_items.append({"label": lbl}); base_map.append(i)
         if action == "s":
+            set_state(chat_id, mode="org_search", awaiting_search=True)
             bot.answer_callback_query(c.id)
-            ask_search(chat_id, mode="org_search", cat=cat)
-            return
-
+            bot.send_message(chat_id, "🔎 Qidirish uchun matn yozing:"); return
         if action == "p":
-            page = int(parts[2])
-            kb = build_paged_inline(base_items, page=page, prefix="org", cols=2, per_page=20)
-            set_state(chat_id, mode="tashkilot_list", cat=cat, org_page=page, awaiting_search=False)
+            pg = int(parts[2])
+            kb = build_paged_inline(base_items, pg, "org")
+            set_state(chat_id, org_page=pg)
             bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=kb)
-            bot.answer_callback_query(c.id)
-            return
-
+            bot.answer_callback_query(c.id); return
         if action == "i":
-            filtered_i = int(parts[2])
-            if filtered_i < 0 or filtered_i >= len(base_map):
-                bot.answer_callback_query(c.id, "Topilmadi.", show_alert=True)
-                return
-            real_i = base_map[filtered_i]
-            it = ORGS[cat][real_i]
-            bot.send_message(chat_id, org_card(it, cat))
-            bot.answer_callback_query(c.id)
-            return
+            fi = int(parts[2])
+            if fi >= len(base_map):
+                bot.answer_callback_query(c.id, "Topilmadi.", show_alert=True); return
+            bot.send_message(chat_id, org_card(ORGS[cat][base_map[fi]], cat),
+                             parse_mode="Markdown")
+            bot.answer_callback_query(c.id); return
 
     bot.answer_callback_query(c.id)
 
-# =========================
-# 13) SEARCH TEXT (user yozgan matn)
-# =========================
+# ============================================================
+# 16. ADMIN TAHRIRLASH MATNI
+# ============================================================
+@bot.message_handler(
+    func=lambda m: (m.from_user.id in ADMIN_STATE
+                    and ADMIN_STATE[m.from_user.id].get("action") in ("edit_staff","edit_org"))
+)
+def handle_admin_edit(m):
+    uid  = m.from_user.id
+    ast  = get_astate(uid)
+    text = (m.text or "").strip()
+    if not text:
+        bot.send_message(m.chat.id, "⚠️ Bo'sh matn. Qayta yozing yoki /cancel bosing."); return
+
+    FM = {"n":"name","r":"role","p":"phone"}
+    action = ast.get("action")
+
+    if action == "edit_staff":
+        idx = ast["idx"]; keys = ast["keys"]; field = FM.get(ast["field"], ast["field"])
+        key = keys[idx]
+        if key in STAFF:
+            old = STAFF[key].get(field,"—")
+            STAFF[key][field] = text; save_data()
+            s = STAFF[key]
+            bot.send_message(m.chat.id,
+                f"✅ *Saqlandi!*\n\n"
+                f"👤 {tr(s.get('name',''))}\n"
+                f"📌 {tr(s.get('role',''))}\n"
+                f"📞 {s.get('phone','')}\n\n"
+                f"_Eski: {tr(str(old))}_", parse_mode="Markdown")
+        clear_astate(uid); return
+
+    if action == "edit_org":
+        ci = ast["ci"]; ii = ast["ii"]; field = FM.get(ast["field"], ast["field"])
+        cats = list(ORGS.keys()); cat = cats[ci]
+        if ii < len(ORGS.get(cat,[])):
+            old = ORGS[cat][ii].get(field,"—")
+            ORGS[cat][ii][field] = text; save_data()
+            it = ORGS[cat][ii]
+            bot.send_message(m.chat.id,
+                f"✅ *Saqlandi!*\n\n"
+                f"👤 {tr(it.get('name',''))}\n"
+                f"📌 {tr(it.get('role',''))}\n"
+                f"📞 {it.get('phone','')}\n\n"
+                f"_Eski: {tr(str(old))}_", parse_mode="Markdown")
+        clear_astate(uid); return
+
+# ============================================================
+# 17. UMUMIY MATN (qidiruv + default)
+# ============================================================
 @bot.message_handler(func=lambda m: True)
 def handle_all(m):
-    if ensure_allowed_or_hint(m):
-        return
+    uid = m.from_user.id
+    if not is_allowed(uid): _access_hint(m); return
+
+    # Admin tahrirlash holati
+    if uid in ADMIN_STATE and ADMIN_STATE[uid].get("action"):
+        handle_admin_edit(m); return
 
     st = get_state(m.chat.id)
     if st.get("awaiting_search"):
         q = (m.text or "").strip()
         set_state(m.chat.id, awaiting_search=False)
+        mode = st.get("mode")
 
-        # Mahalla qidiruvi
-        if st.get("mode") == "mahalla_search":
+        if mode == "mahalla_search":
             set_state(m.chat.id, mode="mahalla", mfy_query=q, mfy_page=0)
             kb, _, _ = mahalla_buttons_list(page=0, query=q)
             if not kb:
-                bot.send_message(m.chat.id, "Topilmadi. Boshqa so‘z yozing yoki Mahalla menyusiga qayting.", reply_markup=main_menu())
+                bot.send_message(m.chat.id, "❌ Topilmadi. Qayta yozing.", reply_markup=main_menu())
             else:
-                bot.send_message(m.chat.id, f"🔎 Natija: *{q}*", reply_markup=kb)
+                bot.send_message(m.chat.id, f"🔎 Natija: *{q}*",
+                                 reply_markup=kb, parse_mode="Markdown")
             return
 
-        # Tashkilot qidiruvi
-        if st.get("mode") == "org_search":
+        if mode == "org_search":
             cat = st.get("cat")
             set_state(m.chat.id, mode="tashkilot_list", cat=cat, org_query=q, org_page=0)
-            items = []
-            for it in ORGS[cat]:
-                label = org_item_label(it)
-                if q.lower() not in label.lower() and q.lower() not in tr(it.get("name","")).lower():
-                    continue
-                items.append({"label": label})
+            items = [{"label": org_item_label(it)} for it in ORGS.get(cat,[])
+                     if q.lower() in org_item_label(it).lower()
+                     or q.lower() in tr(it.get("name","")).lower()]
             if not items:
-                bot.send_message(m.chat.id, "Topilmadi. Boshqa so‘z yozing yoki Orqaga bosing.", reply_markup=tashkilotlar_menu())
+                bot.send_message(m.chat.id, "❌ Topilmadi.", reply_markup=tashkilotlar_menu())
             else:
-                kb = build_paged_inline(items, page=0, prefix="org", cols=2, per_page=20)
-                bot.send_message(m.chat.id, f"🔎 Natija: *{q}*  (Kategoriya: {tr(cat)})", reply_markup=kb)
+                bot.send_message(m.chat.id, f"🔎 Natija: *{q}* ({tr(cat)})",
+                                 reply_markup=build_paged_inline(items,0,"org"),
+                                 parse_mode="Markdown")
             return
 
-    # Default
-    bot.send_message(m.chat.id, "Iltimos, menyudan foydalaning.", reply_markup=main_menu())
+    bot.send_message(m.chat.id, "Iltimos, menyudan foydalaning. 👇",
+                     reply_markup=main_menu())
 
-# =========================
-# RUN (Railway uchun majburiy)
-# =========================
+# ============================================================
+# 18. RUN
+# ============================================================
 if __name__ == "__main__":
-    print("Bot ishga tushdi...")
+    if not ADMIN_IDS:
+        print("=" * 50)
+        print("⚠️  OGOHLANTIRISH: ADMIN_IDS o'rnatilmagan!")
+        print("    Railway → Variables → ADMIN_IDS=123456789")
+        print("=" * 50)
+    print(f"✅ Bot ishga tushdi. Adminlar: {ADMIN_IDS or 'YO\'Q!'}")
     while True:
         try:
             bot.remove_webhook()
             bot.polling(none_stop=True, interval=0, timeout=60)
         except Exception as e:
-            print(f"Xatolik: {e}")
+            print(f"❌ Xatolik: {e}")
             time.sleep(5)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
