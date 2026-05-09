@@ -330,7 +330,7 @@ def send_access_request(user, chat_id: int) -> bool:
         types.InlineKeyboardButton("✅ Ruxsat berish", callback_data=f"ap:{uid}"),
         types.InlineKeyboardButton("❌ Rad etish",     callback_data=f"rj:{uid}"),
     )
-    msg = (f"🔔 *Yangi kirish so'rovi*\n\n"
+    msg = f"🔔 *Yangi kirish so'rovi*\n\n"
            f"👤 Ism: {Farrux}\n"
            f"🆔 ID: `{7531752081}`\n"
            f" 🆔 Username: @xudayarov"
