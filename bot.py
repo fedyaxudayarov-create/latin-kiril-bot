@@ -621,28 +621,55 @@ def _access_hint(m):
 # ============================================================
 # 14. HANDLERS — Foydalanuvchi buyruqlari
 # ============================================================
+# @bot.message_handler(commands=["start"])
+# def cmd_start(m):
+#     uid = m.from_user.id
+#     if not is_allowed(uid):
+#         if not ADMIN_IDS:
+#             bot.send_message(m.chat.id, "⛔️ Ruxsat yo'q. Admin bilan bog'laning.")
+#             return
+#         if str(uid) in PENDING:
+#             bot.send_message(m.chat.id,
+#                 "⏳ So'rovingiz allaqachon yuborilgan.\nAdmin tasdiqlashini kuting...")
+#             return
+#         if send_access_request(m.from_user, m.chat.id):
+#             bot.send_message(m.chat.id,
+#                 "⏳ *Kirish so'rovingiz adminlarga yuborildi.*\nTasdiqlashni kuting...",
+#                 parse_mode="Markdown")
+#         else:
+#             bot.send_message(m.chat.id, "⛔️ Ruxsat yo'q. Admin bilan bog'laning.")
+#         return
+#     set_state(m.chat.id, mode="main", awaiting_search=False)
+#     bot.send_message(m.chat.id, "Uchqo'rg'on botiga xush kelibsiz! 👋",
+#                      reply_markup=main_menu())
 @bot.message_handler(commands=["start"])
 def cmd_start(m):
     uid = m.from_user.id
+    
+    # 1. ADMIN TEKSHIRUVI (Eng birinchi shu tursin)
+    if uid in ADMIN_IDS:
+        set_state(m.chat.id, mode="main", awaiting_search=False)
+        bot.send_message(m.chat.id, "Xush kelibsiz, Admin! 👋\nBarcha funksiyalar ochiq.", 
+                         reply_markup=main_menu())
+        return
+
+    # 2. RUHSAT BERILGANLARNI TEKSHIRISH
     if not is_allowed(uid):
-        if not ADMIN_IDS:
-            bot.send_message(m.chat.id, "⛔️ Ruxsat yo'q. Admin bilan bog'laning.")
-            return
         if str(uid) in PENDING:
-            bot.send_message(m.chat.id,
-                "⏳ So'rovingiz allaqachon yuborilgan.\nAdmin tasdiqlashini kuting...")
+            bot.send_message(m.chat.id, "⏳ So'rovingiz yuborilgan. Admin tasdiqlashini kuting...")
             return
+            
+        # Adminlarga so'rov yuborish qismi
         if send_access_request(m.from_user, m.chat.id):
-            bot.send_message(m.chat.id,
-                "⏳ *Kirish so'rovingiz adminlarga yuborildi.*\nTasdiqlashni kuting...",
-                parse_mode="Markdown")
+            bot.send_message(m.chat.id, "⏳ *Kirish so'rovingiz adminlarga yuborildi.*", parse_mode="Markdown")
         else:
             bot.send_message(m.chat.id, "⛔️ Ruxsat yo'q. Admin bilan bog'laning.")
         return
-    set_state(m.chat.id, mode="main", awaiting_search=False)
-    bot.send_message(m.chat.id, "Uchqo'rg'on botiga xush kelibsiz! 👋",
-                     reply_markup=main_menu())
 
+    # 3. ODDIY RUXSAT BERILGAN FOYDALANUVCHILAR
+    set_state(m.chat.id, mode="main", awaiting_search=False)
+    bot.send_message(m.chat.id, "Uchqo'rg'on botiga xush kelibsiz! 👋", reply_markup=main_menu())
+    
 @bot.message_handler(commands=["admin"])
 def cmd_admin(m):
     if not is_admin(m.from_user.id):
