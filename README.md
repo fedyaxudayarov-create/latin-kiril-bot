@@ -1,2 +1,0 @@
-@orgaddel_bot
-
