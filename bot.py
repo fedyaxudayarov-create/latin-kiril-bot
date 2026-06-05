@@ -243,6 +243,29 @@ DEFAULT_ORGS = {
     ],
 }
 
+
+DEFAULT_LOYIHALAR = {
+    "Ijtimoiy loyihalar": [
+        {"name": "Obod mahalla dasturi",     "status": "Faol",    "budget": "450 mln so'm",  "muddat": "2024–2026", "mas'ul": "Hokim yordamchisi Махкамов М.О.", "phone": "+998-93-495-24-14"},
+        {"name": "Yoshlar - kelajak loyihasi","status": "Faol",   "budget": "120 mln so'm",  "muddat": "2025–2026", "mas'ul": "Yoshlar ishlari agentligi",         "phone": "+998-99-776-96-96"},
+        {"name": "Nogironlarga yordam dasturi",   "status": "Faol",   "budget": "85 mln so'm",   "muddat": "2025",      "mas'ul": "Ijtimoiy xizmatlar markazi",       "phone": "+998-93-925-77-40"},
+    ],
+    "Infratuzilma loyihalari": [
+        {"name": "Yo'llarni ta'mirlash",          "status": "Jarayonda","budget": "1.2 mlrd so'm","muddat": "2025",     "mas'ul": "Yo'llardan foydalanish UK",        "phone": "+998-94-300-00-76"},
+        {"name": "Suv ta'minoti tizimini yangilash","status":"Jarayonda","budget":"680 mln so'm",  "muddat": "2024–2026","mas'ul": "Suv ta'minoti bo'limi",           "phone": "+998-94-453-50-00"},
+        {"name": "Ko'kalamzorlashtirish",          "status": "Faol",  "budget": "95 mln so'm",   "muddat": "2025",      "mas'ul": "Obodonlashtirish boshqarmasi",     "phone": "+998-94-504-87-47"},
+    ],
+    "Iqtisodiy loyihalar": [
+        {"name": "Sanoat zonasini kengaytirish",  "status": "Rejada", "budget": "2.5 mlrd so'm", "muddat": "2025–2027", "mas'ul": "Investitsiya va tashqi savdo bo'limi","phone": "+998-99-407-84-50"},
+        {"name": "Dehqon bozorini zamonaviylash", "status": "Faol",   "budget": "340 mln so'm",  "muddat": "2025",      "mas'ul": "Dehqon bozor MChJ",               "phone": "+998-97-090-55-44"},
+        {"name": "Agropilla rivojlantirish",       "status": "Faol",  "budget": "220 mln so'm",  "muddat": "2025–2026", "mas'ul": "Agropilla MChJ",                  "phone": "+998-94-150-14-65"},
+    ],
+    "Ta'lim loyihalari": [
+        {"name": "Maktablarni ta'mirlash",         "status": "Jarayonda","budget":"550 mln so'm", "muddat": "2025",      "mas'ul": "Maktabgacha va maktab ta'limi bo'limi","phone": "+998-97-541-11-11"},
+        {"name": "Texnikumlar moddiy bazasini mustahkamlash","status":"Faol","budget":"180 mln so'm","muddat":"2025–2026","mas'ul":"1-sonli Texnikom",               "phone": "+998-97-250-64-17"},
+    ],
+}
+
 # ============================================================
 # 4. DATA LOAD / SAVE
 # ============================================================
@@ -361,7 +384,7 @@ Tr\tMFY\tRais\tTel\tHokimYordamchi\tTel\tYoshlar\tTel\tXotinQizlar\tTel\tIjtimoi
 21\tЁписхон\tҚорабоев Хайрулло Хайдаралиевич\t+998(94)508-19-79\tМамадалиев Бахром Турсуналиевич\t+998(88)177-03-03\tОртиқов Жавохир\t+998(50)054-20-40\tАкбарова Сайёра\t+998(93)587-87-80\tХАКИМОВА ДИЛДОРА БАХТИЁРОВНА\t+998(95)857-02-47\tАбдирахимов Отабек\t+998(88)255-55-88\tлейтенант Юсупов Авазбек Машрабжон ўғли\t+998(94)162-55-55
 22\tКатта Чек\tРахматуллаева Равшаной Жўраевна\t+998(94)175-69-27\tЭргашев Жалолиддин Эргашбой ўғли\t+998(94)174-30-53\tКомилов Дониёр\t+998(93)260-66-99\tНажимова Мухаррам\t+998(93)887-83-18\tХАКИМОВА ДИЛДОРА БАХТИЁРОВНА\t+998(95)857-02-47\tАбдирахимов Отабек\t+998(88)255-55-88\tкапитан Абдурахманов Сардор Арибжанович\t+998(93)541-45-86
 23\tҚозоқовул\tРустамова Нилуфар Абдужаббаровна\t+998(94)274-37-87\tАбдуллаев Элмурод Иброхим ўғли\t+998(93)049-00-80\tУбайдуллаев Улуғбек\t+998(95)868-61-62\tХожимуродова Хидоят\t+998(94)506-48-93\tТОЖИБОЕВА ХУРШИДА РАВШОНБЕКОВНА\t+998(93)914-21-83\tАбдирахимов Отабек\t+998(88)255-55-88\tкатта лейтенант Орифжонов Аброржон Орифжон ўғли\t+998(94)217-22-02
-24\tБахт\tМусурмонқулов Толибжон\t+998(94)534-45-45\tвакант\t\tАзизова Дилдора\t+998(95)033-66-06\tУМИРЗАКОВА ДИЛБАРХОН АБДИВОХИДОВНА\t+998(94)272-52-81\tАхмадалиев Абдумалик\t+998(94)508-00-90\tкатта лейтенант Абдурашидов Тўлқинжон Бахтиёр ўғли\t+998(94)504-88-00
+24\tБахт\tМусурмонқулов Толибжон\t+998(94)534-45-45\tУсманов Бахтиёр Абдумухторович\t+998(94)301-22-70\tАзизова Дилдора\t+998(95)033-66-06\tУМИРЗАКОВА ДИЛБАРХОН АБДИВОХИДОВНА\t+998(94)272-52-81\tАхмадалиев Абдумалик\t+998(94)508-00-90\tкатта лейтенант Абдурашидов Тўлқинжон Бахтиёр ўғли\t+998(94)504-88-00
 25\tХалфатўпи\tХакимова Машхура Олимовна\t+998(93)567-01-12\tМирзарахимов Бобурмирзо Шокиржон ўғли\t+998(94)153-98-97\tЭшонқулов Муслимжон\t+998(93)942-59-92\tМаматханова Мухаррам\t+998(93)417-94-40\tЭРКИНБОЕВА ХУСНИДА АБДУРАХИМ ҚИЗИ\t+998(93)484-18-65\tАхмадалиев Абдумалик\t+998(94)508-00-90\tлейтенант Жўраев Азизбек Авазбекович\t+998(50)222-21-55
 26\tЯшиқ\tШокиров Одилжон Абдухалилович\t+998(93)498-85-02\tХидиров Жамшидбек Адашалиевич\t+998(94)067-77-79\tМадрахимова Мастура\t+998(77)119-10-90\tТурақулова Мухаббат\t+998(99)007-69-57\tУМУРЗАКОВА ШАХНОЗА МАМАЖАНОВНА\t+998(93)207-37-81\tНабиев Мумин\t+998(93)499-00-14\tкатта лейтенант Рахимжанов Рустамжон Махмуд ўғли\t+998(93)673-11-77
 27\tЭшонтўпи\tБобохонов Баходир Абдужаббарович\t+998(94)631-82-00\tХудойбердиев Муроджон Йўлдошали ўғли\t+998(94)508-45-45\tАлиев Азизбек\t+998(95)646-35-50\tМаматханова Мухаррам\t+998(93)417-94-40\tНОЗИМЖОНОВ АСАДБЕК МАХМУДЖОН ЎҒЛИ\t+998(93)678-88-58\tИсоқжонов Темур\t+998(33)726-70-70\tкатта лейтенант Нишанов Адхамжон Абдурахим ўғли\t+998(94)150-74-94
@@ -429,7 +452,8 @@ MAHALLA_ROWS.sort(key=lambda x: tr(x["mfy"]).lower())
 # ============================================================
 def main_menu():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    kb.add("🏛️ Hokimiyat", "🏢 Tashkilotlar", "🏘️ Mahalla")
+    kb.add("🏛️ Hokimiyat", "🏢 Tashkilotlar")
+    kb.add("🏘️ Mahalla", "📊 Loyihalar")
     return kb
 
 def hokimiyat_menu():
@@ -601,6 +625,29 @@ def h_staff_info(m):
                      reply_markup=staff_menu(group) if group else hokimiyat_menu(),
                      parse_mode="Markdown")
 
+
+@bot.message_handler(func=lambda m: m.text in ("📊 Loyihalar", "Loyihalar"))
+def h_loyihalar(m):
+    set_state(m.chat.id, mode="loyihalar")
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    statuses = {"Faol": "🟢", "Jarayonda": "🔵", "Rejada": "⚪️"}
+    for cat, items in DEFAULT_LOYIHALAR.items():
+        faol = sum(1 for it in items if it["status"] == "Faol")
+        jarayon = sum(1 for it in items if it["status"] == "Jarayonda")
+        emoji = "🏗️"
+        kb.add(types.InlineKeyboardButton(
+            f"{emoji} {tr(cat)} ({len(items)} ta)",
+            callback_data=f"loy:cat:{list(DEFAULT_LOYIHALAR.keys()).index(cat)}"
+        ))
+    kb.add(types.InlineKeyboardButton("🏠 Bosh sahifa", callback_data="loy:home:0"))
+    bot.send_message(
+        m.chat.id,
+        "📊 *Uchqo'rg'on tumani loyihalari*\n━━━━━━━━━━━━━━━\n"
+        "🟢 Faol  🔵 Jarayonda  ⚪️ Rejada\n\n"
+        "Kategoriyani tanlang:",
+        reply_markup=kb, parse_mode="Markdown"
+    )
+
 @bot.message_handler(func=lambda m: m.text in ("🏢 Tashkilotlar", "Tashkilotlar"))
 def h_tashkilotlar(m):
     set_state(m.chat.id, mode="tashkilot_cat")
@@ -627,6 +674,7 @@ def h_back(m):
     mode = get_state(m.chat.id).get("mode")
     if mode == "staff":         h_hokimiyat(m)
     elif mode == "tashkilot_list": h_tashkilotlar(m)
+    elif mode == "loyihalar":   h_loyihalar(m)
     else:                       cmd_start(m)
 
 # ============================================================
@@ -882,6 +930,67 @@ def all_callbacks(c):
             bot.send_message(chat_id, org_card(ORGS[cat][base_map[fi]], cat),
                              parse_mode="Markdown")
             bot.answer_callback_query(c.id); return
+
+
+    if data.startswith("loy:"):
+        parts = data.split(":")
+        action = parts[1]
+        if action == "home":
+            bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=None)
+            bot.send_message(chat_id, "🏠 Bosh sahifa", reply_markup=main_menu())
+            set_state(chat_id, mode="main"); bot.answer_callback_query(c.id); return
+        if action == "cat":
+            ci = int(parts[2])
+            cats = list(DEFAULT_LOYIHALAR.keys())
+            if ci >= len(cats): bot.answer_callback_query(c.id); return
+            cat = cats[ci]
+            items = DEFAULT_LOYIHALAR[cat]
+            statuses = {"Faol": "🟢", "Jarayonda": "🔵", "Rejada": "⚪️"}
+            kb = types.InlineKeyboardMarkup(row_width=1)
+            for ii, it in enumerate(items):
+                st_emoji = statuses.get(it["status"], "⚪️")
+                label = f"{st_emoji} {tr(it['name'])}"[:45]
+                kb.add(types.InlineKeyboardButton(label, callback_data=f"loy:item:{ci}:{ii}"))
+            kb.add(types.InlineKeyboardButton("◀️ Orqaga", callback_data="loy:back:0"))
+            _safe_edit(chat_id, c.message.message_id,
+                       f"🏗️ *{tr(cat)}*\n━━━━━━━━━━━━━━━\nLoyihani tanlang:",
+                       kb)
+            bot.answer_callback_query(c.id); return
+        if action == "back":
+            kb = types.InlineKeyboardMarkup(row_width=1)
+            for ci2, cat2 in enumerate(DEFAULT_LOYIHALAR.keys()):
+                items2 = DEFAULT_LOYIHALAR[cat2]
+                kb.add(types.InlineKeyboardButton(
+                    f"🏗️ {tr(cat2)} ({len(items2)} ta)",
+                    callback_data=f"loy:cat:{ci2}"
+                ))
+            kb.add(types.InlineKeyboardButton("🏠 Bosh sahifa", callback_data="loy:home:0"))
+            _safe_edit(chat_id, c.message.message_id,
+                       "📊 *Loyihalar*\nKategoriyani tanlang:", kb)
+            bot.answer_callback_query(c.id); return
+        if action == "item":
+            ci = int(parts[2]); ii = int(parts[3])
+            cats = list(DEFAULT_LOYIHALAR.keys())
+            if ci >= len(cats): bot.answer_callback_query(c.id); return
+            cat = cats[ci]
+            items = DEFAULT_LOYIHALAR[cat]
+            if ii >= len(items): bot.answer_callback_query(c.id); return
+            it = items[ii]
+            statuses = {"Faol": "🟢 Faol", "Jarayonda": "🔵 Jarayonda", "Rejada": "⚪️ Rejada"}
+            card = (
+                f"🏗️ *{tr(it['name'])}*\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"📌 Holat: {statuses.get(it['status'], it['status'])}\n"
+                f"💰 Byudjet: *{it['budget']}*\n"
+                f"📅 Muddat: {it['muddat']}\n"
+                f"👤 Mas'ul: {tr(it['mas\'ul'])}\n"
+                f"📞 Tel: `{it['phone']}`"
+            )
+            kb = types.InlineKeyboardMarkup(row_width=1)
+            kb.add(types.InlineKeyboardButton("◀️ Orqaga", callback_data=f"loy:cat:{ci}"))
+            bot.send_message(chat_id, card, parse_mode="Markdown")
+            bot.answer_callback_query(c.id); return
+        bot.answer_callback_query(c.id); return
 
     bot.answer_callback_query(c.id)
 
