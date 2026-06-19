@@ -512,10 +512,12 @@ Tr\tMFY\tRais\tTel\tHokimYordamchi\tTel\tYoshlar\tTel\tXotinQizlar\tTel\tIjtimoi
 def parse_mahalla_tsv(tsv: str):
     lines = [ln.strip() for ln in tsv.splitlines() if ln.strip()]
     if not lines: return []
-    header = lines[0].split("\t")
+    # TSV da haqiqiy tab o'rniga literal \t yozilgan — shuning uchun \\t bo'yicha split
+    sep = "\t" if "\t" in lines[0] else "\\t"
+    header = lines[0].split(sep)
     rows = []
     for ln in lines[1:]:
-        parts = ln.split("\t")
+        parts = ln.split(sep)
         while len(parts) < len(header):
             parts.append("")
         mfy = parts[1].strip()
@@ -651,14 +653,6 @@ def admin_main_kb() -> types.InlineKeyboardMarkup:
     )
     return kb
 
-def _safe_edit(chat_id, msg_id, text, kb=None):
-    try:
-        bot.edit_message_text(text, chat_id, msg_id,
-                              reply_markup=kb, parse_mode="Markdown")
-    except Exception as e:
-        if "not modified" not in str(e).lower():
-            print(f"edit_message error: {e}")
-
 # ============================================================
 # 14. HANDLERS — Foydalanuvchi buyruqlari
 # ============================================================
@@ -777,18 +771,22 @@ def h_dmtt(m):
 def h_mahalla(m):
     set_state(m.chat.id, mode="mahalla", mfy_page=0, mfy_query=None, awaiting_search=False)
     kb, _, _ = mahalla_buttons_list()
+    if kb is None:
+        bot.send_message(m.chat.id, "❌ Mahalla ma'lumotlari topilmadi.", reply_markup=main_menu())
+        return
     bot.send_message(m.chat.id, "🏘️ Mahallani tanlang:", reply_markup=kb)
 
 @bot.message_handler(func=lambda m: m.text in ("↩️ Orqaga", "Orqaga"))
 def h_back(m):
     mode = get_state(m.chat.id).get("mode")
-    if mode == "staff":            h_hokimiyat(m)
-    elif mode == "tashkilot_list": h_tashkilotlar(m)
-    elif mode == "tashkilot_cat":  h_tashkilotlar(m)
-    elif mode == "maktab_list":    h_maktablar(m)
-    elif mode == "dmtt_list":      h_dmtt(m)
-    elif mode == "loyihalar":      h_loyihalar(m)
-    else:                          cmd_start(m)
+    if mode == "staff":                              h_hokimiyat(m)
+    elif mode == "tashkilot_list":                   h_tashkilotlar(m)
+    elif mode == "tashkilot_cat":                    h_tashkilotlar(m)
+    elif mode == "maktab_list":                      h_maktablar(m)
+    elif mode == "dmtt_list":                        h_dmtt(m)
+    elif mode == "loyihalar":                        h_loyihalar(m)
+    elif mode in ("mahalla", "mahalla_search"):      h_mahalla(m)
+    else:                                            cmd_start(m)
 
 # ============================================================
 # 15. CALLBACKS — Hammasi bir joyda
@@ -1003,11 +1001,21 @@ def all_callbacks(c):
         if action == "p":
             pg = int(parts[2]); q = get_state(chat_id).get("mfy_query")
             kb, _, _ = mahalla_buttons_list(page=pg, query=q)
-            set_state(chat_id, mfy_page=pg)
-            bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=kb)
+            set_state(chat_id, mfy_page=pg, mode="mahalla")
+            if kb is None:
+                bot.answer_callback_query(c.id, "Topilmadi.", show_alert=True); return
+            try:
+                bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=kb)
+            except:
+                bot.send_message(chat_id, "🏘️ Mahallani tanlang:", reply_markup=kb)
             bot.answer_callback_query(c.id); return
         if action == "i":
-            bot.send_message(chat_id, mahalla_card(int(parts[2])), parse_mode="Markdown")
+            idx_val = int(parts[2])
+            pg = get_state(chat_id).get("mfy_page", 0)
+            q  = get_state(chat_id).get("mfy_query")
+            back_kb = types.InlineKeyboardMarkup()
+            back_kb.add(types.InlineKeyboardButton("◀️ Ro'yxatga qaytish", callback_data=f"mfy:p:{pg}"))
+            bot.send_message(chat_id, mahalla_card(idx_val), parse_mode="Markdown", reply_markup=back_kb)
             bot.answer_callback_query(c.id); return
 
     if data.startswith("org:"):
