@@ -754,14 +754,8 @@ def h_mahalla(m):
 @bot.message_handler(func=lambda m: m.text in ("↩️ Orqaga", "Orqaga"))
 def h_back(m):
     mode = get_state(m.chat.id).get("mode")
-    if mode == "staff":                              h_hokimiyat(m)
-    elif mode == "tashkilot_list":                   h_tashkilotlar(m)
-    elif mode == "tashkilot_cat":                    h_tashkilotlar(m)
-    elif mode == "maktab_list":                      h_maktablar(m)
-    elif mode == "dmtt_list":                        h_dmtt(m)
-    elif mode == "loyihalar":                        h_loyihalar(m)
-    elif mode in ("mahalla", "mahalla_search"):      h_mahalla(m)
-    else:                                            cmd_start(m)
+    if mode == "tashkilot_list":   h_tashkilotlar(m)
+    else:                          cmd_start(m)
 
 # ============================================================
 # 15. CALLBACKS — Hammasi bir joyda
